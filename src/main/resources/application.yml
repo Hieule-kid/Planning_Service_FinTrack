@@ -1,0 +1,68 @@
+server:
+  port: 8090
+
+spring:
+  application:
+    name: planning-service
+
+  # ── PostgreSQL Data Source ─────────────────────────────────────────────────
+  datasource:
+    url: ${POSTGRES_URL:jdbc:postgresql://localhost:5432/fintrack_planning}
+    username: ${POSTGRES_USERNAME:postgres}
+    password: ${POSTGRES_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: ${HIKARI_MAX_POOL:10}
+      minimum-idle: 2
+      connection-timeout: 30000
+      idle-timeout: 600000
+
+  # ── JPA / Hibernate ────────────────────────────────────────────────────────
+  jpa:
+    hibernate:
+      # dev: "update" | test: "create-drop" | prod: "validate"
+      ddl-auto: ${JPA_DDL_AUTO:update}
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+
+# ── Eureka Client ───────────────────────────────────────────────────────────
+eureka:
+  client:
+    service-url:
+      defaultZone: http://${EUREKA_USERNAME:eureka}:${EUREKA_PASSWORD:eureka123}@${EUREKA_HOST:localhost}:8761/eureka/
+    register-with-eureka: true
+    fetch-registry: true
+  instance:
+    prefer-ip-address: true
+    instance-id: ${spring.application.name}:${server.port}
+
+# ── JWT ──────────────────────────────────────────────────────────────────────
+# This service only VALIDATES tokens issued by auth-service — it never issues them.
+# The secret MUST match auth-service's FINTRACK_JWT_SECRET so signatures verify.
+fintrack:
+  jwt:
+    secret: ${FINTRACK_JWT_SECRET:fintrack-super-secret-key-change-me-in-prod-123}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics
+
+logging:
+  level:
+    com.fintrack.planning: DEBUG
+
+# ── Swagger / SpringDoc ────────────────────────────────────────────────────
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+    persist-authorization: true
+    try-it-out-enabled: true
