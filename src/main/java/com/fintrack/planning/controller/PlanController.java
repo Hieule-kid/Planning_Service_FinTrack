@@ -42,7 +42,6 @@ import java.util.List;
 @RequestMapping("/api/v1/plans")
 @RequiredArgsConstructor
 @Tag(name = "Plans", description = "Create and track personal savings goals and their milestone schedules")
-@SecurityRequirement(name = "******")
 public class PlanController {
 
     private final PlanService planService;
