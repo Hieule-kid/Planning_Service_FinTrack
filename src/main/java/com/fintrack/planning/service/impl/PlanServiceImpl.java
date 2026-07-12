@@ -10,6 +10,7 @@ import com.fintrack.planning.dto.response.PlanResponse;
 import com.fintrack.planning.dto.response.PlanSummaryResponse;
 import com.fintrack.planning.model.MilestoneEntity;
 import com.fintrack.planning.model.PlanEntity;
+import com.fintrack.planning.model.enums.TimeframeCategory;
 import com.fintrack.planning.repository.MilestoneRepository;
 import com.fintrack.planning.repository.PlanRepository;
 import com.fintrack.planning.service.PlanService;
@@ -48,10 +49,14 @@ public class PlanServiceImpl implements PlanService {
      */
     @Override
     public PlanResponse createPlan(String userId, CreatePlanRequest request) {
+        normalizeRequest(request);
+
         PlanEntity plan = PlanEntity.builder()
                 .userId(userId)
                 .goalTitle(request.getGoalTitle())
                 .targetAmount(request.getTargetAmount())
+                .currency(request.getCurrency())
+                .planCategory(request.getPlanCategory())
                 .timeframeCategory(request.getTimeframeCategory())
                 .durationInMonths(request.getDurationInMonths())
                 .durationInYears(request.getDurationInYears())
@@ -210,6 +215,42 @@ public class PlanServiceImpl implements PlanService {
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
+     * Normalizes a {@link CreatePlanRequest} from the FE's flat shape to the internal shape
+     * expected by {@link MilestoneCalculator}:
+     * <ul>
+     *   <li>If {@code duration} (flat months) is provided and {@code durationInMonths} is absent,
+     *       sets {@code durationInMonths = duration}.</li>
+     *   <li>If {@code timeframeCategory} is absent, derives it from {@code durationInMonths}:
+     *       3–11 → SHORT_TERM, 12–60 → MID_TERM, 61+ → LONG_TERM.</li>
+     *   <li>Defaults {@code startDate} to today when omitted.</li>
+     * </ul>
+     */
+    private void normalizeRequest(CreatePlanRequest request) {
+        if (request.getStartDate() == null) {
+            request.setStartDate(LocalDate.now());
+        }
+
+        if (request.getDuration() != null && request.getDurationInMonths() == null) {
+            request.setDurationInMonths(request.getDuration());
+        }
+
+        if (request.getTimeframeCategory() == null) {
+            if (request.getDurationInMonths() != null) {
+                int months = request.getDurationInMonths();
+                if (months <= 11) {
+                    request.setTimeframeCategory(TimeframeCategory.SHORT_TERM);
+                } else if (months <= 60) {
+                    request.setTimeframeCategory(TimeframeCategory.MID_TERM);
+                } else {
+                    request.setTimeframeCategory(TimeframeCategory.LONG_TERM);
+                }
+            } else if (request.getDurationInYears() != null) {
+                request.setTimeframeCategory(TimeframeCategory.LONG_TERM);
+            }
+        }
+    }
+
+    /**
      * Loads a plan by ID and verifies it is owned by {@code userId}.
      *
      * @param userId the requesting user's ID
@@ -282,6 +323,8 @@ public class PlanServiceImpl implements PlanService {
                 .id(plan.getId())
                 .goalTitle(plan.getGoalTitle())
                 .targetAmount(plan.getTargetAmount())
+                .currency(plan.getCurrency())
+                .planCategory(plan.getPlanCategory())
                 .timeframeCategory(plan.getTimeframeCategory())
                 .durationInMonths(plan.getDurationInMonths())
                 .durationInYears(plan.getDurationInYears())
@@ -310,6 +353,8 @@ public class PlanServiceImpl implements PlanService {
                 .id(plan.getId())
                 .goalTitle(plan.getGoalTitle())
                 .targetAmount(plan.getTargetAmount())
+                .currency(plan.getCurrency())
+                .planCategory(plan.getPlanCategory())
                 .timeframeCategory(plan.getTimeframeCategory())
                 .frequency(plan.getFrequency())
                 .startDate(plan.getStartDate())

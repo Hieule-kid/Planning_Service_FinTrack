@@ -1,7 +1,9 @@
 package com.fintrack.planning.model;
 
 import com.fintrack.core.base.BaseEntity;
+import com.fintrack.planning.model.enums.Currency;
 import com.fintrack.planning.model.enums.Frequency;
+import com.fintrack.planning.model.enums.PlanCategory;
 import com.fintrack.planning.model.enums.TimeframeCategory;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -64,16 +66,26 @@ public class PlanEntity extends BaseEntity {
     @Column(name = "target_amount", nullable = false, precision = 19, scale = 2)
     private BigDecimal targetAmount;
 
-    /** Whether this is a short-term (3-12 months) or long-term (1-30 years) goal. */
+    /** Currency of the plan's target and milestone amounts. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "currency", nullable = false, length = 3)
+    private Currency currency;
+
+    /** Semantic category of the goal (e.g. TRAVEL, HOUSE). Nullable for legacy plans. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "plan_category", length = 20)
+    private PlanCategory planCategory;
+
+    /** Overall time horizon of the goal. */
     @Enumerated(EnumType.STRING)
     @Column(name = "timeframe_category", nullable = false, length = 20)
     private TimeframeCategory timeframeCategory;
 
-    /** Duration in months — populated only when {@link #timeframeCategory} is {@code SHORT_TERM}. */
+    /** Duration in months — used for SHORT_TERM and MID_TERM plans. */
     @Column(name = "duration_in_months")
     private Integer durationInMonths;
 
-    /** Duration in years — populated only when {@link #timeframeCategory} is {@code LONG_TERM}. */
+    /** Duration in years — legacy field for LONG_TERM plans created before the flat duration migration. */
     @Column(name = "duration_in_years")
     private Integer durationInYears;
 

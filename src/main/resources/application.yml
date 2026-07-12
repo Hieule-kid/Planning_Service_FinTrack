@@ -5,6 +5,11 @@ spring:
   application:
     name: planning-service
 
+  # ── Jackson ────────────────────────────────────────────────────────────────
+  jackson:
+    mapper:
+      accept-case-insensitive-enums: true
+
   # ── PostgreSQL Data Source ─────────────────────────────────────────────────
   datasource:
     url: ${POSTGRES_URL:jdbc:postgresql://localhost:5432/fintrack_planning}

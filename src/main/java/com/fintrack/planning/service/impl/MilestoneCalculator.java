@@ -109,14 +109,23 @@ public final class MilestoneCalculator {
                 throw new AppException(ErrorCode.INVALID_REQUEST,
                         "durationInMonths is required for short-term plans");
             }
+        } else if (category == TimeframeCategory.MID_TERM) {
+            if (frequency != Frequency.DAILY && frequency != Frequency.MONTHLY) {
+                throw new AppException(ErrorCode.INVALID_REQUEST,
+                        "Mid-term plans only support DAILY or MONTHLY frequency");
+            }
+            if (request.getDurationInMonths() == null) {
+                throw new AppException(ErrorCode.INVALID_REQUEST,
+                        "durationInMonths is required for mid-term plans");
+            }
         } else if (category == TimeframeCategory.LONG_TERM) {
             if (frequency != Frequency.MONTHLY && frequency != Frequency.ANNUALLY) {
                 throw new AppException(ErrorCode.INVALID_REQUEST,
                         "Long-term plans only support MONTHLY or ANNUALLY frequency");
             }
-            if (request.getDurationInYears() == null) {
+            if (request.getDurationInMonths() == null && request.getDurationInYears() == null) {
                 throw new AppException(ErrorCode.INVALID_REQUEST,
-                        "durationInYears is required for long-term plans");
+                        "durationInMonths or durationInYears is required for long-term plans");
             }
         } else {
             throw new AppException(ErrorCode.INVALID_REQUEST, "Unsupported timeframe category");
@@ -130,14 +139,18 @@ public final class MilestoneCalculator {
      * @return the number of milestones to generate
      */
     private static int resolvePeriodCount(CreatePlanRequest request) {
+        int effectiveMonths = request.getDurationInMonths() != null
+                ? request.getDurationInMonths()
+                : request.getDurationInYears() * 12;
+
         return switch (request.getFrequency()) {
             case DAILY -> (int) ChronoUnit.DAYS.between(
                     request.getStartDate(),
-                    request.getStartDate().plusMonths(request.getDurationInMonths()));
-            case MONTHLY -> request.getTimeframeCategory() == TimeframeCategory.SHORT_TERM
-                    ? request.getDurationInMonths()
-                    : request.getDurationInYears() * 12;
-            case ANNUALLY -> request.getDurationInYears();
+                    request.getStartDate().plusMonths(effectiveMonths));
+            case MONTHLY -> effectiveMonths;
+            case ANNUALLY -> request.getDurationInYears() != null
+                    ? request.getDurationInYears()
+                    : effectiveMonths / 12;
         };
     }
 

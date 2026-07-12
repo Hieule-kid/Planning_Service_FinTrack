@@ -6,8 +6,9 @@ package com.fintrack.planning.model.enums;
  * <p>Determines the valid range for the plan's duration and which
  * {@link Frequency} values are permitted:
  * <ul>
- *   <li>{@link #SHORT_TERM} — 3 to 12 months, {@code DAILY} or {@code MONTHLY} frequency</li>
- *   <li>{@link #LONG_TERM} — 1 to 30 years, {@code MONTHLY} or {@code ANNUALLY} frequency</li>
+ *   <li>{@link #SHORT_TERM} — 3 to 11 months, {@code DAILY} or {@code MONTHLY} frequency</li>
+ *   <li>{@link #MID_TERM}   — 12 to 60 months, {@code DAILY} or {@code MONTHLY} frequency</li>
+ *   <li>{@link #LONG_TERM}  — 61 to 240 months, {@code MONTHLY} or {@code ANNUALLY} frequency</li>
  * </ul>
  *
  * @author FinTrack Team
@@ -15,9 +16,12 @@ package com.fintrack.planning.model.enums;
  */
 public enum TimeframeCategory {
 
-    /** Goal duration between 3 and 12 months. */
+    /** Goal duration between 3 and 11 months. */
     SHORT_TERM,
 
-    /** Goal duration between 1 and 30 years. */
+    /** Goal duration between 12 and 60 months (1–5 years). */
+    MID_TERM,
+
+    /** Goal duration between 61 and 240 months (5–20 years). */
     LONG_TERM
 }

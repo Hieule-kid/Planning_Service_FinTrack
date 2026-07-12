@@ -1,6 +1,8 @@
 package com.fintrack.planning.dto.response;
 
+import com.fintrack.planning.model.enums.Currency;
 import com.fintrack.planning.model.enums.Frequency;
+import com.fintrack.planning.model.enums.PlanCategory;
 import com.fintrack.planning.model.enums.TimeframeCategory;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -28,6 +30,8 @@ public class PlanSummaryResponse {
     private String id;
     private String goalTitle;
     private BigDecimal targetAmount;
+    private Currency currency;
+    private PlanCategory planCategory;
     private TimeframeCategory timeframeCategory;
     private Frequency frequency;
     private LocalDate startDate;
