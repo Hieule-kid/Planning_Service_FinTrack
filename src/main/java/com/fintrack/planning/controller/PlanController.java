@@ -1,6 +1,8 @@
 package com.fintrack.planning.controller;
 
 import com.fintrack.core.dto.ApiResponse;
+import com.fintrack.planning.dto.ai.AiPlanResponse;
+import com.fintrack.planning.dto.ai.AiPromptRequest;
 import com.fintrack.planning.dto.request.CreatePlanRequest;
 import com.fintrack.planning.dto.request.ToggleRecalculateRequest;
 import com.fintrack.planning.dto.request.UpdateMilestoneRequest;
@@ -169,5 +171,26 @@ public class PlanController {
             @PathVariable String planId) {
         planService.deletePlan(userId, planId);
         return ResponseEntity.noContent().build();
+    }
+
+    @Operation(
+        summary = "Auto-generate a budget plan from a natural-language prompt",
+        description = """
+            Send a plain-English (or Vietnamese) description of your financial situation — e.g.
+            "I earn 20 million VND per month and want to save aggressively" — and Gemini will
+            return a structured budget breakdown with per-category allocations and advice.
+            """
+    )
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Budget plan generated"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Blank prompt"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Missing or invalid JWT")
+    })
+    @PostMapping("/ai/generate")
+    public ResponseEntity<ApiResponse<AiPlanResponse>> generateAiPlan(
+            @AuthenticationPrincipal String userId,
+            @Valid @RequestBody AiPromptRequest request) {
+        AiPlanResponse plan = planService.generateAiPlan(userId, request.prompt());
+        return ResponseEntity.ok(ApiResponse.success(plan, "Budget plan generated successfully"));
     }
 }

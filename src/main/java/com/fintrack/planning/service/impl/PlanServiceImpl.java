@@ -2,6 +2,7 @@ package com.fintrack.planning.service.impl;
 
 import com.fintrack.core.exception.AppException;
 import com.fintrack.core.exception.ErrorCode;
+import com.fintrack.planning.dto.ai.AiPlanResponse;
 import com.fintrack.planning.dto.request.CreatePlanRequest;
 import com.fintrack.planning.dto.request.ToggleRecalculateRequest;
 import com.fintrack.planning.dto.request.UpdateMilestoneRequest;
@@ -16,6 +17,7 @@ import com.fintrack.planning.repository.PlanRepository;
 import com.fintrack.planning.service.PlanService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -39,6 +41,7 @@ public class PlanServiceImpl implements PlanService {
 
     private final PlanRepository planRepository;
     private final MilestoneRepository milestoneRepository;
+    private final ChatClient chatClient;
 
     // ─────────────────────────────────────────────────────────────────────────
     // CREATE
@@ -208,6 +211,34 @@ public class PlanServiceImpl implements PlanService {
         planRepository.save(plan);
 
         log.info("Deleted plan: planId={}, userId={}", planId, userId);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // AI
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public AiPlanResponse generateAiPlan(String userId, String prompt) {
+        log.info("Generating AI budget plan for user [{}]", userId);
+        try {
+            AiPlanResponse plan = chatClient.prompt()
+                    .user(prompt)
+                    .call()
+                    .entity(AiPlanResponse.class);
+            if (plan == null) {
+                throw new AppException(ErrorCode.SERVICE_UNAVAILABLE, "AI returned an empty response");
+            }
+            log.info("AI budget plan generated for user [{}]: {} categories", userId, plan.categories().size());
+            return plan;
+        } catch (AppException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            log.error("AI plan generation failed for user [{}]: {}", userId, ex.getMessage(), ex);
+            throw new AppException(ErrorCode.SERVICE_UNAVAILABLE, "AI service is unavailable. Please try again.");
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────

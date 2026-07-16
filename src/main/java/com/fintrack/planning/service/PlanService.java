@@ -1,5 +1,6 @@
 package com.fintrack.planning.service;
 
+import com.fintrack.planning.dto.ai.AiPlanResponse;
 import com.fintrack.planning.dto.request.CreatePlanRequest;
 import com.fintrack.planning.dto.request.ToggleRecalculateRequest;
 import com.fintrack.planning.dto.request.UpdateMilestoneRequest;
@@ -97,4 +98,14 @@ public interface PlanService {
      * @param planId the plan's ID
      */
     void deletePlan(String userId, String planId);
+
+    /**
+     * Sends a free-text financial prompt to Google Gemini and returns a structured
+     * budget breakdown.
+     *
+     * @param userId the requesting user's ID
+     * @param prompt the user's natural-language financial description
+     * @return the AI-generated budget plan
+     */
+    AiPlanResponse generateAiPlan(String userId, String prompt);
 }
