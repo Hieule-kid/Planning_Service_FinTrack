@@ -12,7 +12,7 @@ spring:
 
   # ── PostgreSQL Data Source ─────────────────────────────────────────────────
   datasource:
-    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB_NAME:fintrack_planning}
+    url: ${POSTGRES_URL:jdbc:postgresql://localhost:5432/fintrack_planning}
     username: ${POSTGRES_USERNAME:postgres}
     password: ${POSTGRES_PASSWORD:postgres}
     driver-class-name: org.postgresql.Driver
