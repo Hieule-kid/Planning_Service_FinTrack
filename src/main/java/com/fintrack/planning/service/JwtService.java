@@ -3,6 +3,7 @@ package com.fintrack.planning.service;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -28,6 +29,15 @@ public class JwtService {
 
     @Value("${fintrack.jwt.secret}")
     private String secret;
+
+    /** Refuse a missing or known development signing secret at startup. */
+    @PostConstruct
+    void validateSecret() {
+        if (secret == null || secret.length() < 32 || secret.contains("change-me")) {
+            throw new IllegalStateException(
+                    "FINTRACK_JWT_SECRET must be set to an unpredictable value of at least 32 characters");
+        }
+    }
 
     /**
      * Extracts the {@code userId} claim embedded by {@code auth-service} at login time.

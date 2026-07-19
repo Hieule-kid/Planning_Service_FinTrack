@@ -57,10 +57,11 @@ eureka:
 
 # ── JWT ──────────────────────────────────────────────────────────────────────
 # This service only VALIDATES tokens issued by auth-service — it never issues them.
-# The secret MUST match auth-service's FINTRACK_JWT_SECRET so signatures verify.
+# The localhost fallback must match auth-service; set FINTRACK_JWT_SECRET in
+# deployed environments so signatures verify with a private secret.
 fintrack:
   jwt:
-    secret: ${FINTRACK_JWT_SECRET:fintrack-super-secret-key-change-me-in-prod-123}
+    secret: ${FINTRACK_JWT_SECRET:fintrack-local-development-jwt-secret-2026}
 
 management:
   endpoints:
