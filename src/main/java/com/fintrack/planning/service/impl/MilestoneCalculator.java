@@ -61,6 +61,11 @@ public final class MilestoneCalculator {
         if (periodCount <= 0) {
             throw new AppException(ErrorCode.INVALID_REQUEST, "Plan duration must produce at least one milestone");
         }
+        if (periodCount > 3650) {
+            throw new AppException(ErrorCode.INVALID_REQUEST,
+                    "Plan would generate " + periodCount + " milestones which exceeds the maximum of 3650. " +
+                    "Use a longer interval (e.g. MONTHLY instead of DAILY).");
+        }
 
         BigDecimal targetAmount = request.getTargetAmount();
         // Floor-divide so we never over-allocate; the remainder is added to the last milestone.
@@ -148,9 +153,10 @@ public final class MilestoneCalculator {
                     request.getStartDate(),
                     request.getStartDate().plusMonths(effectiveMonths));
             case MONTHLY -> effectiveMonths;
+            // Ceiling division: 25 months → 3 annual milestones (not 2 via truncation)
             case ANNUALLY -> request.getDurationInYears() != null
                     ? request.getDurationInYears()
-                    : effectiveMonths / 12;
+                    : (effectiveMonths + 11) / 12;
         };
     }
 

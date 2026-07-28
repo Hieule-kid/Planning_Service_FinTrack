@@ -68,6 +68,7 @@ public class CreatePlanRequest {
     @Schema(description = "Duration in months — set by the service from the flat duration field; " +
             "can also be supplied directly for short/mid-term plans.", example = "6")
     @Min(value = 3, message = "Duration in months must be at least 3")
+    @Max(value = 720, message = "Duration in months must not exceed 720 (60 years)")
     private Integer durationInMonths;
 
     @Schema(description = "Duration in years — legacy field for long-term plans (1–20 years).", example = "5")

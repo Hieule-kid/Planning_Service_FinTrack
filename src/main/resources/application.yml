@@ -36,7 +36,7 @@ spring:
   # ── Google Gemini via OpenAI-compatible endpoint (Spring AI) ──────────────
   ai:
     openai:
-      api-key: ${GEMINI_API_KEY:""}
+      api-key: ${GEMINI_API_KEY:}
       base-url: https://generativelanguage.googleapis.com/v1beta/openai
       chat:
         options:
@@ -49,11 +49,18 @@ eureka:
       defaultZone: ${EUREKA_DEFAULT_ZONE:http://${EUREKA_USERNAME:eureka}:${EUREKA_PASSWORD:eureka123}@${EUREKA_HOST:localhost}:8761/eureka/}
     register-with-eureka: true
     fetch-registry: true
+    # Retry registration more aggressively during cold start (Render free tier spin-up race)
+    initial-instance-info-replication-interval-seconds: 10
+    instance-info-replication-interval-seconds: 10
+    registry-fetch-interval-seconds: 10
   instance:
     prefer-ip-address: false
     hostname: ${RENDER_EXTERNAL_HOSTNAME:localhost}
     non-secure-port: ${server.port}
     instance-id: ${spring.application.name}:${server.port}
+    # Fast heartbeat so the gateway detects re-registration quickly after spin-up
+    lease-renewal-interval-in-seconds: 10
+    lease-expiration-duration-in-seconds: 30
 
 # ── JWT ──────────────────────────────────────────────────────────────────────
 # This service only VALIDATES tokens issued by auth-service — it never issues them.

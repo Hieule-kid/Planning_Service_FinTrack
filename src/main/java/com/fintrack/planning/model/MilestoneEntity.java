@@ -46,6 +46,9 @@ import java.time.LocalDate;
     name = "milestones",
     indexes = {
         @Index(name = "idx_milestones_plan_id", columnList = "plan_id")
+    },
+    uniqueConstraints = {
+        @jakarta.persistence.UniqueConstraint(name = "uq_milestones_plan_seq", columnNames = {"plan_id", "sequence_index"})
     }
 )
 public class MilestoneEntity extends BaseEntity {
@@ -79,7 +82,7 @@ public class MilestoneEntity extends BaseEntity {
     private LocalDate deadline;
 
     /** The original, immutable allocation computed when the plan was created. */
-    @Column(name = "base_target_savings", nullable = false, precision = 19, scale = 2)
+    @Column(name = "base_target_savings", nullable = false, precision = 19, scale = 2, updatable = false)
     private BigDecimal baseTargetSavings;
 
     /**

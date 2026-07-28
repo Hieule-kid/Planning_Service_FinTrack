@@ -25,4 +25,5 @@ RUN ./mvnw package -pl planning-service -am -B -DskipTests -q
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 COPY --from=build /workspace/planning-service/target/planning-service-*.jar app.jar
+EXPOSE 8090
 ENTRYPOINT ["java", "-jar", "app.jar"]

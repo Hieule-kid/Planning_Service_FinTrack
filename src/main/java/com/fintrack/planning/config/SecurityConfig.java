@@ -6,6 +6,7 @@ import com.fintrack.core.exception.ErrorCode;
 import com.fintrack.planning.filter.JwtAuthFilter;
 import com.fintrack.planning.service.JwtService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.MediaType;
@@ -73,6 +74,13 @@ public class SecurityConfig {
                             ErrorCode.UNAUTHORIZED.getCode(), ErrorCode.UNAUTHORIZED.getMessage());
                     response.getWriter().write(objectMapper.writeValueAsString(body));
                 })
+                .accessDeniedHandler((request, response, accessDeniedException) -> {
+                    response.setStatus(ErrorCode.FORBIDDEN.getHttpStatus().value());
+                    response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                    ApiResponse<Void> body = ApiResponse.error(
+                            ErrorCode.FORBIDDEN.getCode(), ErrorCode.FORBIDDEN.getMessage());
+                    response.getWriter().write(objectMapper.writeValueAsString(body));
+                })
             )
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
@@ -88,5 +96,18 @@ public class SecurityConfig {
     @Bean
     public JwtAuthFilter jwtAuthFilter(JwtService jwtService) {
         return new JwtAuthFilter(jwtService);
+    }
+
+    /**
+     * Prevents Spring Boot from auto-registering {@link JwtAuthFilter} in the
+     * servlet container's outer filter chain. The filter is already registered
+     * inside {@link SecurityFilterChain} via {@code addFilterBefore}; without this,
+     * it would run twice (once in Spring Security's chain, once at the container level).
+     */
+    @Bean
+    public FilterRegistrationBean<JwtAuthFilter> jwtFilterRegistration(JwtAuthFilter jwtAuthFilter) {
+        FilterRegistrationBean<JwtAuthFilter> registration = new FilterRegistrationBean<>(jwtAuthFilter);
+        registration.setEnabled(false);
+        return registration;
     }
 }

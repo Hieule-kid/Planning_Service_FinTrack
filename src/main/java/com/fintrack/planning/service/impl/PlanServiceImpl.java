@@ -19,6 +19,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -51,6 +52,7 @@ public class PlanServiceImpl implements PlanService {
      * {@inheritDoc}
      */
     @Override
+    @Transactional
     public PlanResponse createPlan(String userId, CreatePlanRequest request) {
         normalizeRequest(request);
 
@@ -120,6 +122,7 @@ public class PlanServiceImpl implements PlanService {
      * {@inheritDoc}
      */
     @Override
+    @Transactional
     public PlanResponse updateMilestoneActualSaved(String userId, String planId, String milestoneId,
                                                     UpdateMilestoneRequest request) {
         PlanEntity plan = getOwnedPlanOrThrow(userId, planId);
@@ -139,6 +142,7 @@ public class PlanServiceImpl implements PlanService {
      * {@inheritDoc}
      */
     @Override
+    @Transactional
     public PlanResponse completeMilestone(String userId, String planId, String milestoneId) {
         PlanEntity plan = getOwnedPlanOrThrow(userId, planId);
         MilestoneEntity milestone = getOwnedMilestoneOrThrow(planId, milestoneId);
@@ -161,6 +165,7 @@ public class PlanServiceImpl implements PlanService {
      * {@inheritDoc}
      */
     @Override
+    @Transactional
     public PlanResponse undoMilestone(String userId, String planId, String milestoneId) {
         PlanEntity plan = getOwnedPlanOrThrow(userId, planId);
         MilestoneEntity milestone = getOwnedMilestoneOrThrow(planId, milestoneId);
@@ -181,6 +186,7 @@ public class PlanServiceImpl implements PlanService {
      * {@inheritDoc}
      */
     @Override
+    @Transactional
     public PlanResponse updateSettings(String userId, String planId, ToggleRecalculateRequest request) {
         PlanEntity plan = getOwnedPlanOrThrow(userId, planId);
         plan.setRecalculateOnMissedDeadline(request.getRecalculateOnMissedDeadline());
@@ -203,6 +209,7 @@ public class PlanServiceImpl implements PlanService {
      * the plan itself is soft-deleted to preserve the audit trail.
      */
     @Override
+    @Transactional
     public void deletePlan(String userId, String planId) {
         PlanEntity plan = getOwnedPlanOrThrow(userId, planId);
 
