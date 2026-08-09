@@ -11,7 +11,6 @@ COPY pom.xml ./
 COPY core/pom.xml core/
 COPY auth-service/pom.xml auth-service/
 COPY config-service/pom.xml config-service/
-COPY gateway-service/pom.xml gateway-service/
 COPY planning-service/pom.xml planning-service/
 COPY service-template/pom.xml service-template/
 RUN ./mvnw dependency:go-offline -B -q
