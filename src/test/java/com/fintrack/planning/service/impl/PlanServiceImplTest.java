@@ -274,7 +274,7 @@ class PlanServiceImplTest {
 
     @Test
     void listPlans_emptyRepository_returnsEmptyList() {
-        when(planRepository.findByUserIdAndDeletedFalseOrderByCreatedAtDesc(USER_ID)).thenReturn(List.of());
+        when(planRepository.findByUserIdOrderByCreatedAtDesc(USER_ID)).thenReturn(List.of());
 
         List<PlanSummaryResponse> result = planService.listPlans(USER_ID);
 
@@ -283,7 +283,7 @@ class PlanServiceImplTest {
 
     @Test
     void listPlans_returnsSummaryForEachPlan() {
-        when(planRepository.findByUserIdAndDeletedFalseOrderByCreatedAtDesc(USER_ID))
+        when(planRepository.findByUserIdOrderByCreatedAtDesc(USER_ID))
                 .thenReturn(List.of(defaultPlan));
         when(milestoneRepository.findByPlanIdOrderBySequenceIndexAsc(PLAN_ID))
                 .thenReturn(List.of());
@@ -300,7 +300,7 @@ class PlanServiceImplTest {
         MilestoneEntity completed = buildMilestone("ms-1", new BigDecimal("100.00"),
                 new BigDecimal("100.00"), LocalDate.of(2027, 1, 31));
 
-        when(planRepository.findByUserIdAndDeletedFalseOrderByCreatedAtDesc(USER_ID))
+        when(planRepository.findByUserIdOrderByCreatedAtDesc(USER_ID))
                 .thenReturn(List.of(defaultPlan));
         when(milestoneRepository.findByPlanIdOrderBySequenceIndexAsc(PLAN_ID))
                 .thenReturn(List.of(completed));
