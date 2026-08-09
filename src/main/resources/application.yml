@@ -76,6 +76,10 @@ management:
       exposure:
         include: health, info, metrics
 
+app:
+  cors:
+    allowed-origin: ${FRONTEND_ORIGIN:http://localhost:3000}
+
 logging:
   level:
     com.fintrack.planning: DEBUG
