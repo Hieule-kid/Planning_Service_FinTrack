@@ -159,7 +159,7 @@ public class PlanController {
         return ResponseEntity.ok(ApiResponse.success(response, "Settings updated"));
     }
 
-    @Operation(summary = "Delete a plan", description = "Soft-deletes the plan and removes its milestones.")
+    @Operation(summary = "Delete a plan", description = "Permanently deletes the plan and all its milestones.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "204", description = "Plan deleted"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Plan belongs to another user"),

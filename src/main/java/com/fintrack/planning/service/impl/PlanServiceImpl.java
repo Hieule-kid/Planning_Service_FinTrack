@@ -93,7 +93,7 @@ public class PlanServiceImpl implements PlanService {
      */
     @Override
     public List<PlanSummaryResponse> listPlans(String userId) {
-        return planRepository.findByUserIdAndDeletedFalseOrderByCreatedAtDesc(userId).stream()
+        return planRepository.findByUserIdOrderByCreatedAtDesc(userId).stream()
                 .map(plan -> {
                     List<MilestoneEntity> milestones = milestoneRepository.findByPlanIdOrderBySequenceIndexAsc(plan.getId());
                     List<MilestoneCalculator.LiveMilestone> live = MilestoneCalculator.computeLiveMilestones(
@@ -206,7 +206,7 @@ public class PlanServiceImpl implements PlanService {
      * {@inheritDoc}
      *
      * <p>Milestones are physically removed (they are owned exclusively by the plan);
-     * the plan itself is soft-deleted to preserve the audit trail.
+     * both the plan and its milestones are physically removed from the database.
      */
     @Override
     @Transactional
@@ -214,8 +214,7 @@ public class PlanServiceImpl implements PlanService {
         PlanEntity plan = getOwnedPlanOrThrow(userId, planId);
 
         milestoneRepository.deleteByPlanId(planId);
-        plan.setDeleted(true);
-        planRepository.save(plan);
+        planRepository.delete(plan);
 
         log.info("Deleted plan: planId={}, userId={}", planId, userId);
     }
@@ -299,7 +298,6 @@ public class PlanServiceImpl implements PlanService {
      */
     private PlanEntity getOwnedPlanOrThrow(String userId, String planId) {
         PlanEntity plan = planRepository.findById(planId)
-                .filter(p -> !p.isDeleted())
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Plan not found with id: " + planId));
 
         if (!plan.getUserId().equals(userId)) {

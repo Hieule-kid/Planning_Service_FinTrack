@@ -17,20 +17,20 @@ import java.util.Optional;
 public interface PlanRepository extends JpaRepository<PlanEntity, String> {
 
     /**
-     * Returns all non-deleted plans owned by the given user, most recently created first.
+     * Returns all plans owned by the given user, most recently created first.
      *
      * @param userId the owning user's ID
      * @return the user's plans
      */
-    List<PlanEntity> findByUserIdAndDeletedFalseOrderByCreatedAtDesc(String userId);
+    List<PlanEntity> findByUserIdOrderByCreatedAtDesc(String userId);
 
     /**
-     * Finds a single non-deleted plan by ID and owning user, enforcing multi-tenancy
+     * Finds a single plan by ID and owning user, enforcing multi-tenancy
      * directly in the query.
      *
      * @param id     the plan ID
      * @param userId the owning user's ID
      * @return the plan, if found and owned by {@code userId}
      */
-    Optional<PlanEntity> findByIdAndUserIdAndDeletedFalse(String id, String userId);
+    Optional<PlanEntity> findByIdAndUserId(String id, String userId);
 }
