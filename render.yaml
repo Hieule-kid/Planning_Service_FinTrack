@@ -1,0 +1,44 @@
+version: "1"
+projects:
+  - name: My project
+    environments:
+      - name: Production
+
+        services:
+          # ── Planning Service ──────────────────────────────────────────────────
+          - type: web
+            name: fintrack-planning
+            runtime: docker
+            repo: https://github.com/Hieule-kid/Planning_Service_FinTrack
+            plan: free
+            region: singapore
+            dockerContext: .
+            dockerfilePath: ./Dockerfile
+            autoDeployTrigger: commit
+            port: 8090
+            envVars:
+              - key: FINTRACK_DEV_ENV
+                sync: false
+              - key: POSTGRES_URL
+                sync: false
+              - key: POSTGRES_USERNAME
+                sync: false
+              - key: POSTGRES_PASSWORD
+                sync: false
+              - key: EUREKA_DEFAULT_ZONE
+                sync: false
+              - key: EUREKA_USERNAME
+                sync: false
+              - key: EUREKA_PASSWORD
+                sync: false
+              - key: FINTRACK_JWT_SECRET
+                sync: false
+              - key: GEMINI_API_KEY
+                sync: false
+              - key: FRONTEND_ORIGIN
+                sync: false
+              - key: RENDER_EXTERNAL_HOSTNAME
+                fromService:
+                  name: fintrack-planning
+                  type: web
+                  property: host
