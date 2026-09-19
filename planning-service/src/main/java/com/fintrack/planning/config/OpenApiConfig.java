@@ -30,8 +30,18 @@ public class OpenApiConfig {
     @Value("${spring.application.name:planning-service}")
     private String serviceName;
 
+    @Value("${RENDER_EXTERNAL_HOSTNAME:}")
+    private String renderExternalHostname;
+
     @Bean
     public OpenAPI serviceOpenAPI() {
+        List<Server> servers = renderExternalHostname.isBlank()
+                ? List.of(new Server().url("http://localhost:" + serverPort).description("Local Development"))
+                : List.of(
+                        new Server().url("https://" + renderExternalHostname).description("Production Server"),
+                        new Server().url("http://localhost:" + serverPort).description("Local Development")
+                );
+
         return new OpenAPI()
                 .info(new Info()
                         .title("FinTrack – " + serviceName + " API")
@@ -41,11 +51,7 @@ public class OpenApiConfig {
                                 .name("FinTrack Team")
                                 .email("dev@fintrack.com"))
                 )
-                .servers(List.of(
-                        new Server()
-                                .url("http://localhost:" + serverPort)
-                                .description("Local Development")
-                ))
+                .servers(servers)
                 .addSecurityItem(new SecurityRequirement().addList(SECURITY_SCHEME_NAME))
                 .components(new Components()
                         .addSecuritySchemes(SECURITY_SCHEME_NAME,
