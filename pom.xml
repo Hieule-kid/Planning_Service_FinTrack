@@ -16,24 +16,37 @@
     </parent>
 
     <!-- ============================================================
-         PROJECT IDENTITY — aggregator for this repo (core submodule + planning-service)
+         PROJECT IDENTITY — aggregator for this repo (planning-service)
          ============================================================ -->
     <groupId>com.fintrack</groupId>
     <artifactId>fintrack-planning-parent</artifactId>
     <version>1.0.0-SNAPSHOT</version>
     <packaging>pom</packaging>
     <name>FinTrack :: Planning Repo Aggregator</name>
-    <description>Aggregator POM for this repo: builds the core submodule together with planning-service via the Maven reactor</description>
+    <description>Aggregator POM for this repo: builds planning-service, which resolves `core` from GitHub Packages</description>
 
     <!-- ============================================================
          MODULES
-         `core` is a git submodule pointing at Core_Service_FinTrack —
-         see .gitmodules. Built first since planning-service depends on it.
+         `core` (Core_Service_FinTrack) is no longer a submodule or a
+         vendored copy — it's resolved as a normal Maven dependency
+         from GitHub Packages (see <repositories> below and README).
          ============================================================ -->
     <modules>
-        <module>core</module>
         <module>planning-service</module>
     </modules>
+
+    <!-- ============================================================
+         REPOSITORIES — where to resolve `com.fintrack:core` from.
+         GitHub Packages requires authentication even for public repos;
+         see README for the one-time local Maven settings.xml setup.
+         ============================================================ -->
+    <repositories>
+        <repository>
+            <id>github</id>
+            <name>GitHub Packages (Core_Service_FinTrack)</name>
+            <url>https://maven.pkg.github.com/Hieule-kid/Core_Service_FinTrack</url>
+        </repository>
+    </repositories>
 
     <!-- ============================================================
          GLOBAL PROPERTIES
@@ -44,13 +57,17 @@
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
+        <!-- Override spring-boot-starter-parent's managed 1.18.36: too old for
+             this machine's JDK, causes "TypeTag :: UNKNOWN" in IDE tooling. -->
+        <lombok.version>1.18.46</lombok.version>
+
         <spring-cloud.version>2024.0.1</spring-cloud.version>
         <jjwt.version>0.12.6</jjwt.version>
         <mapstruct.version>1.6.2</mapstruct.version>
         <springdoc.version>2.8.3</springdoc.version>
         <spring-ai.version>1.0.0</spring-ai.version>
 
-        <!-- Must match core/pom.xml's <version> (the submodule's own version) -->
+        <!-- Must match the version published for com.fintrack:core on GitHub Packages -->
         <fintrack.version>1.0.0-SNAPSHOT</fintrack.version>
     </properties>
 
@@ -91,7 +108,7 @@
                 <version>${mapstruct.version}</version>
             </dependency>
 
-            <!-- core submodule (Core_Service_FinTrack, checked out at ./core) -->
+            <!-- core (Core_Service_FinTrack) — published to GitHub Packages, see <repositories> above -->
             <dependency>
                 <groupId>com.fintrack</groupId>
                 <artifactId>core</artifactId>

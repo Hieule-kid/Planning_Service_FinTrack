@@ -2,25 +2,22 @@
 FROM eclipse-temurin:21-jdk-alpine AS build
 WORKDIR /workspace
 
-# git is needed to fetch the `core` submodule inside the build container in case
-# the platform's checkout didn't already populate it (see README for details).
-RUN apk add --no-cache git
+# `com.fintrack:core` is resolved from GitHub Packages (no submodule, no
+# vendored copy). GitHub Packages requires auth even for public repos, so
+# a token needs to flow into settings.xml at build time — see README.
+ARG GITHUB_ACTOR
+ARG GITHUB_TOKEN
 
-COPY mvnw mvnw.cmd ./
+COPY mvnw mvnw.cmd settings.xml ./
 COPY .mvn .mvn
 RUN chmod +x mvnw
 
-# Copy the whole repo (small) so `.git`/`.gitmodules` are available for the
-# submodule check below, then make sure `core/` actually has sources in it.
 COPY . .
-RUN if [ ! -f core/pom.xml ]; then \
-        git submodule update --init --recursive; \
-    fi
 
-RUN ./mvnw dependency:go-offline -B -q
+RUN ./mvnw -s settings.xml dependency:go-offline -B -q
 
 # Build
-RUN ./mvnw package -pl planning-service -am -B -DskipTests -q
+RUN ./mvnw -s settings.xml package -pl planning-service -am -B -DskipTests -q
 
 # ── Runtime Stage ─────────────────────────────────────────────────────────────
 FROM eclipse-temurin:21-jre-alpine

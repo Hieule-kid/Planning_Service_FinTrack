@@ -25,6 +25,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        # Needed to resolve com.fintrack:core from GitHub Packages during
+        # the build — export these in your shell (or put in .env) first.
+        GITHUB_ACTOR: ${GITHUB_ACTOR}
+        GITHUB_TOKEN: ${GITHUB_TOKEN}
     image: fintrack/planning-service:latest
     restart: always
     environment:
