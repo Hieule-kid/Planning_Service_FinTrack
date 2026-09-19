@@ -10,11 +10,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Unit tests for {@link DateRange#resolve(LocalDate, LocalDate)} — defaulting and
- * the partial / reversed / oversized guard rails.
+ * Unit tests for {@link DateRange#resolve(LocalDate, LocalDate)}.
  *
- * @author FinTrack Team
- * @since 1.0.0
  */
 class DateRangeTest {
 

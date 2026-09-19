@@ -25,35 +25,16 @@ import java.util.Locale;
  * milestone schedule generation, live status derivation, and deficit
  * redistribution — can be unit tested in isolation.
  *
- * @author FinTrack Team
- * @since 1.0.0
  */
 public final class MilestoneCalculator {
 
     private static final DateTimeFormatter MONTH_YEAR_FORMATTER =
             DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH);
 
-    /** Prevent instantiation. */
     private MilestoneCalculator() {
         throw new UnsupportedOperationException("MilestoneCalculator is a utility class");
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Schedule generation
-    // ─────────────────────────────────────────────────────────────────────────
-
-    /**
-     * Generates the full milestone schedule for a new plan, splitting the target
-     * amount evenly across intervals with any remainder allocated to the last milestone.
-     *
-     * <p>The returned entities are not yet attached to a {@code PlanEntity} or persisted —
-     * the caller is responsible for setting {@code plan} before saving.
-     *
-     * @param request the validated plan-creation request
-     * @return the generated milestones, in schedule order, each with {@code sequenceIndex} set
-     * @throws AppException with {@link ErrorCode#INVALID_REQUEST} if the timeframe/frequency/duration
-     *                       combination is invalid
-     */
     public static List<MilestoneEntity> generateSchedule(CreatePlanRequest request) {
         validateCombination(request);
 
@@ -68,7 +49,6 @@ public final class MilestoneCalculator {
         }
 
         BigDecimal targetAmount = request.getTargetAmount();
-        // Floor-divide so we never over-allocate; the remainder is added to the last milestone.
         BigDecimal baseShare = targetAmount.divide(BigDecimal.valueOf(periodCount), 2, RoundingMode.DOWN);
         BigDecimal remainder = targetAmount.subtract(baseShare.multiply(BigDecimal.valueOf(periodCount)));
 
@@ -94,13 +74,6 @@ public final class MilestoneCalculator {
         return milestones;
     }
 
-    /**
-     * Validates that the timeframe category, frequency, and duration field combination
-     * on the request is internally consistent.
-     *
-     * @param request the plan-creation request
-     * @throws AppException with {@link ErrorCode#INVALID_REQUEST} if invalid
-     */
     private static void validateCombination(CreatePlanRequest request) {
         TimeframeCategory category = request.getTimeframeCategory();
         Frequency frequency = request.getFrequency();
@@ -137,12 +110,6 @@ public final class MilestoneCalculator {
         }
     }
 
-    /**
-     * Computes the total number of milestone intervals for the plan.
-     *
-     * @param request the plan-creation request
-     * @return the number of milestones to generate
-     */
     private static int resolvePeriodCount(CreatePlanRequest request) {
         int effectiveMonths = request.getDurationInMonths() != null
                 ? request.getDurationInMonths()
@@ -153,22 +120,12 @@ public final class MilestoneCalculator {
                     request.getStartDate(),
                     request.getStartDate().plusMonths(effectiveMonths));
             case MONTHLY -> effectiveMonths;
-            // Ceiling division: 25 months → 3 annual milestones (not 2 via truncation)
             case ANNUALLY -> request.getDurationInYears() != null
                     ? request.getDurationInYears()
                     : (effectiveMonths + 11) / 12;
         };
     }
 
-    /**
-     * Computes the timeline label, period date, and deadline for the {@code index}-th
-     * (zero-based) interval of the schedule.
-     *
-     * @param startDate the plan's start date
-     * @param frequency the recurrence interval
-     * @param index     zero-based interval position
-     * @return the resolved dates and label for this interval
-     */
     private static IntervalDates resolveIntervalDates(LocalDate startDate, Frequency frequency, int index) {
         return switch (frequency) {
             case DAILY -> {
@@ -192,30 +149,9 @@ public final class MilestoneCalculator {
         };
     }
 
-    /** Small holder for the three date-derived attributes of a schedule interval. */
     private record IntervalDates(String timeline, LocalDate periodDate, LocalDate deadline) {
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Live status + deficit redistribution
-    // ─────────────────────────────────────────────────────────────────────────
-
-    /**
-     * Computes the live, effective target savings and status for every milestone in a plan,
-     * applying deficit redistribution when {@code recalculateOnMissedDeadline} is enabled.
-     *
-     * <p>Redistribution algorithm: every milestone whose deadline has passed (without being
-     * completed) contributes its deficit ({@code baseTargetSavings - actualSaved}) to a pool.
-     * That pool is split evenly — with any remainder on the last receiver — across all
-     * milestones that are still pending (deadline not yet passed, not completed), added on
-     * top of their own {@code baseTargetSavings}. If there are no such future milestones,
-     * the pool is left unredistributed (nothing changes).
-     *
-     * @param milestones                  the plan's milestones, in any order
-     * @param recalculateOnMissedDeadline whether redistribution is enabled for this plan
-     * @param now                         the current date to evaluate against
-     * @return one {@link LiveMilestone} per input milestone, in the same order
-     */
     public static List<LiveMilestone> computeLiveMilestones(
             List<MilestoneEntity> milestones, boolean recalculateOnMissedDeadline, LocalDate now) {
 
@@ -228,8 +164,6 @@ public final class MilestoneCalculator {
             return result;
         }
 
-        // First pass: determine each milestone's status against its own base allocation,
-        // to identify which are overdue (deficit sources) and which are future/pending (receivers).
         MilestoneStatus[] baseStatuses = new MilestoneStatus[milestones.size()];
         for (int i = 0; i < milestones.size(); i++) {
             baseStatuses[i] = deriveStatus(milestones.get(i), milestones.get(i).getBaseTargetSavings(), now);
@@ -279,16 +213,6 @@ public final class MilestoneCalculator {
         return result;
     }
 
-    /**
-     * Derives the live status of a milestone against a given effective target.
-     *
-     * <p>Precedence: completed (by amount or manual flag) &gt; overdue (deadline passed) &gt; pending.
-     *
-     * @param milestone       the milestone entity (for {@code actualSaved}, {@code manuallyCompleted}, {@code deadline})
-     * @param effectiveTarget the target savings to compare {@code actualSaved} against
-     * @param now             the current date
-     * @return the derived {@link MilestoneStatus}
-     */
     public static MilestoneStatus deriveStatus(MilestoneEntity milestone, BigDecimal effectiveTarget, LocalDate now) {
         if (milestone.isManuallyCompleted() || milestone.getActualSaved().compareTo(effectiveTarget) >= 0) {
             return MilestoneStatus.COMPLETED;
@@ -299,17 +223,6 @@ public final class MilestoneCalculator {
         return MilestoneStatus.PENDING;
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Totals
-    // ─────────────────────────────────────────────────────────────────────────
-
-    /**
-     * Computes the plan-level totals from a set of already-live-evaluated milestones.
-     *
-     * @param liveMilestones the live milestones (see {@link #computeLiveMilestones})
-     * @param targetAmount   the plan's overall target amount
-     * @return the computed {@link PlanTotals}
-     */
     public static PlanTotals computeTotals(List<LiveMilestone> liveMilestones, BigDecimal targetAmount) {
         BigDecimal totalSaved = BigDecimal.ZERO;
         for (LiveMilestone live : liveMilestones) {
@@ -339,27 +252,9 @@ public final class MilestoneCalculator {
         return new PlanTotals(totalSaved, remaining, progressPercent);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Value holders
-    // ─────────────────────────────────────────────────────────────────────────
-
-    /**
-     * The live-computed target savings and status for one milestone.
-     *
-     * @param milestone       the underlying persisted entity
-     * @param targetSavings   the effective (possibly redistributed) target savings
-     * @param status          the live-derived status
-     */
     public record LiveMilestone(MilestoneEntity milestone, BigDecimal targetSavings, MilestoneStatus status) {
     }
 
-    /**
-     * The rolled-up totals for a plan.
-     *
-     * @param totalSaved      sum of {@code actualSaved} for completed milestones
-     * @param remaining       {@code max(0, targetAmount - totalSaved)}
-     * @param progressPercent {@code min(100, totalSaved / targetAmount * 100)}
-     */
     public record PlanTotals(BigDecimal totalSaved, BigDecimal remaining, BigDecimal progressPercent) {
     }
 }

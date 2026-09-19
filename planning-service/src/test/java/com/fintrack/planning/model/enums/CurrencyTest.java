@@ -8,16 +8,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Unit tests for {@link Currency}.
- *
- * @author FinTrack Team
- * @since 1.0.0
  */
 class CurrencyTest {
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Enum constants
-    // ─────────────────────────────────────────────────────────────────────────
 
     @Test
     void shouldContainExactlyTwoValues() {
@@ -34,10 +26,6 @@ class CurrencyTest {
         assertThat(Currency.values()).contains(Currency.USD);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // valueOf — happy path
-    // ─────────────────────────────────────────────────────────────────────────
-
     @Test
     void valueOfVnd_returnsVndConstant() {
         assertThat(Currency.valueOf("VND")).isEqualTo(Currency.VND);
@@ -47,10 +35,6 @@ class CurrencyTest {
     void valueOfUsd_returnsUsdConstant() {
         assertThat(Currency.valueOf("USD")).isEqualTo(Currency.USD);
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // valueOf — invalid input
-    // ─────────────────────────────────────────────────────────────────────────
 
     @ParameterizedTest
     @ValueSource(strings = {"vnd", "usd", "EUR", "GBP", "JPY", "", " ", "VND ", " USD"})
@@ -64,10 +48,6 @@ class CurrencyTest {
         assertThatThrownBy(() -> Currency.valueOf(null))
                 .isInstanceOf(NullPointerException.class);
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // name / toString
-    // ─────────────────────────────────────────────────────────────────────────
 
     @Test
     void vndName_isVND() {
@@ -89,10 +69,6 @@ class CurrencyTest {
         assertThat(Currency.USD.toString()).isEqualTo("USD");
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Ordinal — declaration order is part of the public contract for persistence
-    // ─────────────────────────────────────────────────────────────────────────
-
     @Test
     void vndOrdinal_isZero() {
         assertThat(Currency.VND.ordinal()).isZero();
@@ -102,10 +78,6 @@ class CurrencyTest {
     void usdOrdinal_isOne() {
         assertThat(Currency.USD.ordinal()).isOne();
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Identity / equality
-    // ─────────────────────────────────────────────────────────────────────────
 
     @Test
     void sameConstant_isSameInstance() {

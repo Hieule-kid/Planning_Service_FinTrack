@@ -20,17 +20,6 @@ import java.util.List;
 /**
  * JWT Authentication Filter — runs once per request.
  *
- * <p>Extracts and validates the JWT from the {@code Authorization: ******
- * header. Unlike {@code auth-service}'s filter, this service has no local user
- * store — on success, the security context principal is simply the {@code userId}
- * string extracted from the token's claims.
- *
- * <p>Requests without a token (or with an invalid/expired token) proceed
- * unauthenticated; {@code SecurityConfig} rejects them with {@code 401} at the
- * path-authorization level.
- *
- * @author FinTrack Team
- * @since 1.0.0
  */
 @Slf4j
 @RequiredArgsConstructor

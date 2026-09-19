@@ -16,10 +16,8 @@ import java.util.List;
 
 /**
  * Full response DTO for a single plan — includes the plan's fields, its complete
- * (live-recomputed) milestone schedule, and rolled-up totals.
+ * milestone schedule, and rolled-up totals.
  *
- * @author FinTrack Team
- * @since 1.0.0
  */
 @Getter
 @Builder
@@ -44,12 +42,9 @@ public class PlanResponse {
 
     private List<MilestoneResponse> milestones;
 
-    /** Sum of {@code actualSaved} across milestones whose live status is {@code COMPLETED}. */
     private BigDecimal totalSaved;
 
-    /** {@code max(0, targetAmount - totalSaved)}. */
     private BigDecimal remaining;
 
-    /** {@code min(100, totalSaved / targetAmount * 100)}, rounded to 2 decimal places. */
     private BigDecimal progressPercent;
 }

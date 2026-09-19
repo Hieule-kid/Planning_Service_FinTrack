@@ -30,13 +30,6 @@ import java.time.LocalDate;
 /**
  * Default implementation of {@link ExpenseService}.
  *
- * <p><b>Deletion:</b> expenses are <em>soft</em>-deleted ({@code deleted = true}),
- * following the codebase-wide {@code BaseEntity} convention. This is deliberately
- * unlike {@code PlanServiceImpl#deletePlan}, whose hard delete is a documented
- * exception — expense rows are financial history and are kept.
- *
- * @author FinTrack Team
- * @since 1.0.0
  */
 @Slf4j
 @Service
@@ -56,10 +49,6 @@ public class ExpenseServiceImpl implements ExpenseService {
         rejectFutureDate(request.getSpentOn());
 
         ExpenseCategory category = getOwnedCategoryOrThrow(userId, request.getCategoryId());
-
-        // TODO: validate request.currency against the user's account currency.
-        //       auth-service owns the user's preferred currency; it is not available
-        //       here without a cross-service call, and there is no client for that yet.
 
         if (request.getPlanId() != null) {
             verifyPlanOwnership(userId, request.getPlanId());
@@ -149,10 +138,6 @@ public class ExpenseServiceImpl implements ExpenseService {
         log.info("Soft-deleted expense: id={}, userId={}", expenseId, userId);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Private helpers
-    // ─────────────────────────────────────────────────────────────────────────
-
     private void rejectFutureDate(LocalDate spentOn) {
         if (spentOn != null && spentOn.isAfter(LocalDate.now())) {
             throw new AppException(ErrorCode.INVALID_REQUEST, "Expense date cannot be in the future");
@@ -182,11 +167,6 @@ public class ExpenseServiceImpl implements ExpenseService {
         return expense;
     }
 
-    /**
-     * Reuses the plan-ownership pattern from {@code PlanServiceImpl}: load by ID,
-     * verify {@code plan.userId == userId}. Throws {@link ErrorCode#EXPENSE_PLAN_MISMATCH}
-     * on either miss so a caller cannot probe for plan IDs they do not own.
-     */
     private void verifyPlanOwnership(String userId, String planId) {
         PlanEntity plan = planRepository.findById(planId)
                 .orElseThrow(() -> new AppException(ErrorCode.EXPENSE_PLAN_MISMATCH,

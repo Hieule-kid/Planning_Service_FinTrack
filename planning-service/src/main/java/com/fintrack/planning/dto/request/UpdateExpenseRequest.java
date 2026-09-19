@@ -14,11 +14,6 @@ import java.time.LocalDate;
  * Partial-update payload for an existing expense (PATCH semantics — every field
  * is optional; {@code null} means "leave unchanged").
  *
- * <p>This is the only place a user can override {@code expenseType} after the
- * expense was created.
- *
- * @author FinTrack Team
- * @since 1.0.0
  */
 @Getter
 @Setter

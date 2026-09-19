@@ -38,11 +38,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Unit tests for {@link PlanServiceImpl} — covers CRUD orchestration, ownership
- * enforcement, normalisation of FE-shaped requests, and milestone lifecycle ops.
+ * Unit tests for {@link PlanServiceImpl}.
  *
- * @author FinTrack Team
- * @since 1.0.0
  */
 @ExtendWith(MockitoExtension.class)
 class PlanServiceImplTest {
@@ -56,10 +53,6 @@ class PlanServiceImplTest {
     @Mock private MilestoneRepository milestoneRepository;
 
     @InjectMocks private PlanServiceImpl planService;
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Fixtures
-    // ─────────────────────────────────────────────────────────────────────────
 
     private PlanEntity defaultPlan;
 
@@ -81,7 +74,6 @@ class PlanServiceImplTest {
         defaultPlan.setId(PLAN_ID);
     }
 
-    /** Builds a minimal milestone attached to {@code defaultPlan}. */
     private MilestoneEntity buildMilestone(String id, BigDecimal base, BigDecimal saved, LocalDate deadline) {
         MilestoneEntity ms = MilestoneEntity.builder()
                 .baseTargetSavings(base)
@@ -98,7 +90,6 @@ class PlanServiceImplTest {
         return ms;
     }
 
-    /** Returns a minimal valid {@link CreatePlanRequest} that does not need normalisation. */
     private CreatePlanRequest validRequest() {
         CreatePlanRequest req = new CreatePlanRequest();
         req.setGoalTitle("Emergency Fund");
@@ -112,10 +103,6 @@ class PlanServiceImplTest {
         req.setStartDate(LocalDate.of(2027, 1, 1));
         return req;
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // createPlan
-    // ─────────────────────────────────────────────────────────────────────────
 
     @Test
     void createPlan_savesAndReturnsPlanResponse() {
@@ -268,10 +255,6 @@ class PlanServiceImplTest {
         assertThat(captor.getValue().getTimeframeCategory()).isEqualTo(TimeframeCategory.LONG_TERM);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // listPlans
-    // ─────────────────────────────────────────────────────────────────────────
-
     @Test
     void listPlans_emptyRepository_returnsEmptyList() {
         when(planRepository.findByUserIdOrderByCreatedAtDesc(USER_ID)).thenReturn(List.of());
@@ -310,10 +293,6 @@ class PlanServiceImplTest {
         PlanSummaryResponse summary = result.get(0);
         assertThat(summary.getTotalSaved()).isEqualByComparingTo("100.00");
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // getPlan
-    // ─────────────────────────────────────────────────────────────────────────
 
     @Test
     void getPlan_returnsPlanResponse() {
@@ -356,10 +335,6 @@ class PlanServiceImplTest {
                 .satisfies(ex -> assertThat(((AppException) ex).getErrorCode())
                         .isEqualTo(ErrorCode.FORBIDDEN));
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // updateMilestoneActualSaved
-    // ─────────────────────────────────────────────────────────────────────────
 
     @Test
     void updateMilestoneActualSaved_updatesAmountAndReturnsResponse() {
@@ -420,10 +395,6 @@ class PlanServiceImplTest {
                 .satisfies(ex -> assertThat(((AppException) ex).getErrorCode())
                         .isEqualTo(ErrorCode.FORBIDDEN));
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // completeMilestone
-    // ─────────────────────────────────────────────────────────────────────────
 
     @Test
     void completeMilestone_setsActualSavedToEffectiveTargetWhenBelow() {
@@ -495,10 +466,6 @@ class PlanServiceImplTest {
                         .isEqualTo(ErrorCode.RESOURCE_NOT_FOUND));
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // undoMilestone
-    // ─────────────────────────────────────────────────────────────────────────
-
     @Test
     void undoMilestone_clearsManuallyCompletedFlag() {
         MilestoneEntity ms = buildMilestone(MS_ID, new BigDecimal("100.00"),
@@ -536,10 +503,6 @@ class PlanServiceImplTest {
                 .satisfies(ex -> assertThat(((AppException) ex).getErrorCode())
                         .isEqualTo(ErrorCode.RESOURCE_NOT_FOUND));
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // updateSettings
-    // ─────────────────────────────────────────────────────────────────────────
 
     @Test
     void updateSettings_enablesRedistribution() {
@@ -584,10 +547,6 @@ class PlanServiceImplTest {
                 .satisfies(ex -> assertThat(((AppException) ex).getErrorCode())
                         .isEqualTo(ErrorCode.FORBIDDEN));
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // deletePlan
-    // ─────────────────────────────────────────────────────────────────────────
 
     @Test
     void deletePlan_deletesMilestonesAndSoftDeletesPlan() {

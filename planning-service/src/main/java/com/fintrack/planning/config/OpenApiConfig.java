@@ -18,8 +18,6 @@ import java.util.List;
  *
  * <p>Swagger UI: {@code http://localhost:<port>/swagger-ui.html}
  *
- * @author FinTrack Team
- * @since 1.0.0
  */
 @Configuration
 public class OpenApiConfig {
@@ -32,11 +30,6 @@ public class OpenApiConfig {
     @Value("${spring.application.name:planning-service}")
     private String serviceName;
 
-    /**
-     * Configures OpenAPI metadata and JWT ****** scheme.
-     *
-     * @return configured {@link OpenAPI} bean
-     */
     @Bean
     public OpenAPI serviceOpenAPI() {
         return new OpenAPI()

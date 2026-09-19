@@ -27,17 +27,6 @@ import java.util.List;
 /**
  * Spring Security configuration for the Planning Service.
  *
- * <p>Security model:
- * <ul>
- *   <li>Stateless JWT — no HTTP session is created</li>
- *   <li>This service only VALIDATES tokens issued by {@code auth-service}; it never issues them</li>
- *   <li>Public endpoints: {@code /actuator/health}, Swagger UI</li>
- *   <li>All {@code /api/v1/plans/**} endpoints require a valid JWT</li>
- *   <li>Unauthenticated requests receive a {@code 401} with the standard {@link ApiResponse} envelope</li>
- * </ul>
- *
- * @author FinTrack Team
- * @since 1.0.0
  */
 @Configuration
 @EnableWebSecurity
@@ -104,23 +93,11 @@ public class SecurityConfig {
         return http.build();
     }
 
-    /**
-     * Creates the JWT authentication filter bean.
-     *
-     * @param jwtService the validation-only JWT service
-     * @return configured {@link JwtAuthFilter}
-     */
     @Bean
     public JwtAuthFilter jwtAuthFilter(JwtService jwtService) {
         return new JwtAuthFilter(jwtService);
     }
 
-    /**
-     * Prevents Spring Boot from auto-registering {@link JwtAuthFilter} in the
-     * servlet container's outer filter chain. The filter is already registered
-     * inside {@link SecurityFilterChain} via {@code addFilterBefore}; without this,
-     * it would run twice (once in Spring Security's chain, once at the container level).
-     */
     @Bean
     public FilterRegistrationBean<JwtAuthFilter> jwtFilterRegistration(JwtAuthFilter jwtAuthFilter) {
         FilterRegistrationBean<JwtAuthFilter> registration = new FilterRegistrationBean<>(jwtAuthFilter);

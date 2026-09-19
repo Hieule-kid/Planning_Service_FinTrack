@@ -8,10 +8,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Unit tests for {@link TimeframeCategory}.
- *
- * @author FinTrack Team
- * @since 1.0.0
  */
 class TimeframeCategoryTest {
 

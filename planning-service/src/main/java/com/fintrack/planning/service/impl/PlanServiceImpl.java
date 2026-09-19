@@ -32,8 +32,6 @@ import java.util.List;
  * totals) is delegated to the stateless {@link MilestoneCalculator} so it can be
  * unit tested without a Spring context.
  *
- * @author FinTrack Team
- * @since 1.0.0
  */
 @Slf4j
 @Service
@@ -43,10 +41,6 @@ public class PlanServiceImpl implements PlanService {
     private final PlanRepository planRepository;
     private final MilestoneRepository milestoneRepository;
     private final ChatClient chatClient;
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // CREATE
-    // ─────────────────────────────────────────────────────────────────────────
 
     /**
      * {@inheritDoc}
@@ -73,7 +67,6 @@ public class PlanServiceImpl implements PlanService {
 
         PlanEntity savedPlan = planRepository.save(plan);
 
-        // Generate the full milestone schedule up front — pure math, no persistence side effects.
         List<MilestoneEntity> schedule = MilestoneCalculator.generateSchedule(request);
         schedule.forEach(milestone -> milestone.setPlan(savedPlan));
         List<MilestoneEntity> savedMilestones = milestoneRepository.saveAll(schedule);
@@ -83,10 +76,6 @@ public class PlanServiceImpl implements PlanService {
 
         return toPlanResponse(savedPlan, savedMilestones);
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // READ
-    // ─────────────────────────────────────────────────────────────────────────
 
     /**
      * {@inheritDoc}
@@ -113,10 +102,6 @@ public class PlanServiceImpl implements PlanService {
         List<MilestoneEntity> milestones = milestoneRepository.findByPlanIdOrderBySequenceIndexAsc(planId);
         return toPlanResponse(plan, milestones);
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // UPDATE — milestones
-    // ─────────────────────────────────────────────────────────────────────────
 
     /**
      * {@inheritDoc}
@@ -178,10 +163,6 @@ public class PlanServiceImpl implements PlanService {
         return toPlanResponse(plan, milestoneRepository.findByPlanIdOrderBySequenceIndexAsc(planId));
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // UPDATE — plan settings
-    // ─────────────────────────────────────────────────────────────────────────
-
     /**
      * {@inheritDoc}
      */
@@ -198,15 +179,8 @@ public class PlanServiceImpl implements PlanService {
         return toPlanResponse(plan, milestoneRepository.findByPlanIdOrderBySequenceIndexAsc(planId));
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // DELETE
-    // ─────────────────────────────────────────────────────────────────────────
-
     /**
      * {@inheritDoc}
-     *
-     * <p>Milestones are physically removed (they are owned exclusively by the plan);
-     * both the plan and its milestones are physically removed from the database.
      */
     @Override
     @Transactional
@@ -218,10 +192,6 @@ public class PlanServiceImpl implements PlanService {
 
         log.info("Deleted plan: planId={}, userId={}", planId, userId);
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // AI
-    // ─────────────────────────────────────────────────────────────────────────
 
     /**
      * {@inheritDoc}
@@ -247,21 +217,6 @@ public class PlanServiceImpl implements PlanService {
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Private helpers
-    // ─────────────────────────────────────────────────────────────────────────
-
-    /**
-     * Normalizes a {@link CreatePlanRequest} from the FE's flat shape to the internal shape
-     * expected by {@link MilestoneCalculator}:
-     * <ul>
-     *   <li>If {@code duration} (flat months) is provided and {@code durationInMonths} is absent,
-     *       sets {@code durationInMonths = duration}.</li>
-     *   <li>If {@code timeframeCategory} is absent, derives it from {@code durationInMonths}:
-     *       3–11 → SHORT_TERM, 12–60 → MID_TERM, 61+ → LONG_TERM.</li>
-     *   <li>Defaults {@code startDate} to today when omitted.</li>
-     * </ul>
-     */
     private void normalizeRequest(CreatePlanRequest request) {
         if (request.getStartDate() == null) {
             request.setStartDate(LocalDate.now());
@@ -287,15 +242,6 @@ public class PlanServiceImpl implements PlanService {
         }
     }
 
-    /**
-     * Loads a plan by ID and verifies it is owned by {@code userId}.
-     *
-     * @param userId the requesting user's ID
-     * @param planId the plan's ID
-     * @return the owned plan entity
-     * @throws AppException with {@link ErrorCode#RESOURCE_NOT_FOUND} if no such plan exists
-     * @throws AppException with {@link ErrorCode#FORBIDDEN} if the plan belongs to another user
-     */
     private PlanEntity getOwnedPlanOrThrow(String userId, String planId) {
         PlanEntity plan = planRepository.findById(planId)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Plan not found with id: " + planId));
@@ -306,29 +252,12 @@ public class PlanServiceImpl implements PlanService {
         return plan;
     }
 
-    /**
-     * Loads a milestone by ID, scoped to the given plan.
-     *
-     * @param planId      the parent plan's ID
-     * @param milestoneId the milestone's ID
-     * @return the milestone entity
-     * @throws AppException with {@link ErrorCode#RESOURCE_NOT_FOUND} if not found within the plan
-     */
     private MilestoneEntity getOwnedMilestoneOrThrow(String planId, String milestoneId) {
         return milestoneRepository.findByIdAndPlanId(milestoneId, planId)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND,
                         "Milestone not found with id: " + milestoneId));
     }
 
-    /**
-     * Resolves the current live effective target savings for one milestone within its plan's
-     * full schedule (accounting for deficit redistribution, if enabled).
-     *
-     * @param milestone  the milestone to resolve
-     * @param milestones the full schedule the milestone belongs to
-     * @param plan       the parent plan (for the redistribution setting)
-     * @return the live effective target savings for {@code milestone}
-     */
     private BigDecimal liveTargetFor(MilestoneEntity milestone, List<MilestoneEntity> milestones, PlanEntity plan) {
         return MilestoneCalculator.computeLiveMilestones(milestones, plan.isRecalculateOnMissedDeadline(), LocalDate.now())
                 .stream()
@@ -338,14 +267,6 @@ public class PlanServiceImpl implements PlanService {
                 .orElse(milestone.getBaseTargetSavings());
     }
 
-    /**
-     * Maps a plan and its milestones to a full {@link PlanResponse}, including live-recomputed
-     * milestone statuses/targets and rolled-up totals.
-     *
-     * @param plan       the plan entity
-     * @param milestones the plan's milestones
-     * @return the assembled response DTO
-     */
     private PlanResponse toPlanResponse(PlanEntity plan, List<MilestoneEntity> milestones) {
         List<MilestoneCalculator.LiveMilestone> live = MilestoneCalculator.computeLiveMilestones(
                 milestones, plan.isRecalculateOnMissedDeadline(), LocalDate.now());
@@ -377,13 +298,6 @@ public class PlanServiceImpl implements PlanService {
                 .build();
     }
 
-    /**
-     * Maps a plan and pre-computed totals to a lightweight {@link PlanSummaryResponse}.
-     *
-     * @param plan   the plan entity
-     * @param totals the pre-computed live totals
-     * @return the assembled summary DTO
-     */
     private PlanSummaryResponse toSummaryResponse(PlanEntity plan, MilestoneCalculator.PlanTotals totals) {
         return PlanSummaryResponse.builder()
                 .id(plan.getId())
@@ -401,12 +315,6 @@ public class PlanServiceImpl implements PlanService {
                 .build();
     }
 
-    /**
-     * Maps a live-computed milestone to its response DTO.
-     *
-     * @param live the live milestone (entity + effective target + derived status)
-     * @return the assembled response DTO
-     */
     private MilestoneResponse toMilestoneResponse(MilestoneCalculator.LiveMilestone live) {
         MilestoneEntity m = live.milestone();
         return MilestoneResponse.builder()

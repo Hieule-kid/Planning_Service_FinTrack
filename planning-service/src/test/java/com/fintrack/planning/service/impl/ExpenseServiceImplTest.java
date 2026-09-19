@@ -34,12 +34,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Unit tests for {@link ExpenseServiceImpl} — create-time validation and type
- * denormalisation, ownership enforcement on linked plans, and date-window
- * resolution before the list query.
+ * Unit tests for {@link ExpenseServiceImpl}.
  *
- * @author FinTrack Team
- * @since 1.0.0
  */
 @ExtendWith(MockitoExtension.class)
 class ExpenseServiceImplTest {
@@ -54,10 +50,6 @@ class ExpenseServiceImplTest {
     @Mock private PlanRepository planRepository;
 
     @InjectMocks private ExpenseServiceImpl expenseService;
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // create
-    // ─────────────────────────────────────────────────────────────────────────
 
     @Test
     void createExpense_futureDate_isRejected() {
@@ -116,15 +108,9 @@ class ExpenseServiceImplTest {
         assertThat(saved.getValue().getExpenseType()).isEqualTo(ExpenseType.FIXED);
         assertThat(response.getExpenseType()).isEqualTo(ExpenseType.FIXED);
 
-        // The category's defaultType later flipping to VARIABLE must not touch the
-        // already-persisted expense — the value was copied, not joined.
         category.setDefaultType(ExpenseType.VARIABLE);
         assertThat(saved.getValue().getExpenseType()).isEqualTo(ExpenseType.FIXED);
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // list — date window resolution
-    // ─────────────────────────────────────────────────────────────────────────
 
     @Test
     void listExpenses_31DayRange_passesResolvedWindowToRepository() {
@@ -161,10 +147,6 @@ class ExpenseServiceImplTest {
 
         verify(expenseRepository, never()).search(any(), any(), any(), any(), any(), any(), any());
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // helpers
-    // ─────────────────────────────────────────────────────────────────────────
 
     private CreateExpenseRequest baseRequest() {
         CreateExpenseRequest request = new CreateExpenseRequest();

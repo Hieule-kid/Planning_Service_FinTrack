@@ -6,10 +6,6 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * Request payload for toggling a plan's deficit-redistribution setting.
- *
- * @author FinTrack Team
- * @since 1.0.0
  */
 @Getter
 @Setter

@@ -21,14 +21,10 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /**
- * REST controller for expense categories — the buckets a user files spending under.
+ * REST controller for expense categories.
  *
- * <p>Base path: {@code /api/v1/expense-categories}. Every endpoint requires a valid
- * JWT issued by {@code auth-service}; the authenticated user's ID is injected via
- * {@link AuthenticationPrincipal}.
+ * <p>Base path: {@code /api/v1/expense-categories}.
  *
- * @author FinTrack Team
- * @since 1.0.0
  */
 @RestController
 @RequestMapping("/api/v1/expense-categories")

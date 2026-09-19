@@ -21,19 +21,6 @@ import java.time.LocalDate;
 /**
  * Request payload for creating a new savings plan.
  *
- * <p>Accepts both the direct internal field names and the FE's field aliases:
- * <ul>
- *   <li>{@code title} → {@code goalTitle}</li>
- *   <li>{@code savingsPerPeriod} → {@code requiredPerPeriod}</li>
- *   <li>{@code duration} (flat months) → internally mapped to {@code durationInMonths}
- *       with {@code timeframeCategory} derived in the service layer</li>
- * </ul>
- *
- * <p>Frequency is accepted case-insensitively ({@code "monthly"} or {@code "MONTHLY"})
- * via {@code spring.jackson.mapper.accept-case-insensitive-enums: true}.
- *
- * @author FinTrack Team
- * @since 1.0.0
  */
 @Getter
 @Setter

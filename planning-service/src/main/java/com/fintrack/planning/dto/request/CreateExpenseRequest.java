@@ -14,15 +14,6 @@ import java.time.LocalDate;
 /**
  * Request payload for recording a new expense.
  *
- * <p>The {@code expenseType} is not accepted here — it is derived from the
- * chosen category's {@code defaultType} at create time. Use
- * {@link UpdateExpenseRequest} to override it afterwards.
- *
- * <p>{@code spentOn} must not be in the future; that check lives in the service
- * layer (it needs "today" at request time, not a Bean Validation constant).
- *
- * @author FinTrack Team
- * @since 1.0.0
  */
 @Getter
 @Setter

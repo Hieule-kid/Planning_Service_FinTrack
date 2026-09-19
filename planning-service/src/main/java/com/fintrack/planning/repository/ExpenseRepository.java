@@ -18,18 +18,10 @@ import java.util.Optional;
  * <p>{@code BaseEntity}'s soft-delete field is named {@code deleted}
  * (column {@code is_deleted}); all queries here filter {@code deleted = false}.
  *
- * @author FinTrack Team
- * @since 1.0.0
  */
 @Repository
 public interface ExpenseRepository extends JpaRepository<Expense, String> {
 
-    /**
-     * Finds a single non-deleted expense by ID.
-     *
-     * @param id the expense ID
-     * @return the expense, if present and not soft-deleted
-     */
     Optional<Expense> findByIdAndDeletedFalse(String id);
 
     /**

@@ -31,12 +31,8 @@ import java.time.LocalDate;
 /**
  * REST controller for recording and querying expenses.
  *
- * <p>Base path: {@code /api/v1/expenses}. Every endpoint requires a valid JWT
- * issued by {@code auth-service}; the authenticated user's ID is injected via
- * {@link AuthenticationPrincipal} and used to enforce per-user ownership.
+ * <p>Base path: {@code /api/v1/expenses}.
  *
- * @author FinTrack Team
- * @since 1.0.0
  */
 @RestController
 @RequestMapping("/api/v1/expenses")

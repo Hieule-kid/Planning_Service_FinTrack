@@ -20,11 +20,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Unit tests for {@link JwtAuthFilter} — covers token extraction, authentication
- * propagation, and silent failure on invalid/absent tokens.
+ * Unit tests for {@link JwtAuthFilter}.
  *
- * @author FinTrack Team
- * @since 1.0.0
  */
 @ExtendWith(MockitoExtension.class)
 class JwtAuthFilterTest {
@@ -45,10 +42,6 @@ class JwtAuthFilterTest {
     void tearDown() {
         SecurityContextHolder.clearContext();
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Missing / invalid header
-    // ─────────────────────────────────────────────────────────────────────────
 
     @Test
     void doFilter_noAuthorizationHeader_proceedsWithoutSettingAuthentication() throws Exception {
@@ -83,10 +76,6 @@ class JwtAuthFilterTest {
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Valid token
-    // ─────────────────────────────────────────────────────────────────────────
-
     @Test
     void doFilter_validToken_setsSecurityContextPrincipalToUserId() throws Exception {
         when(request.getHeader("Authorization")).thenReturn("Bearer valid-token");
@@ -102,7 +91,6 @@ class JwtAuthFilterTest {
 
     @Test
     void doFilter_validToken_doesNotOverrideExistingAuthentication() throws Exception {
-        // Pre-populate the security context to simulate an already-authenticated request
         org.springframework.security.authentication.UsernamePasswordAuthenticationToken existing =
                 new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
                         "existing-user", null, java.util.List.of());
@@ -113,14 +101,9 @@ class JwtAuthFilterTest {
 
         filter.doFilterInternal(request, response, filterChain);
 
-        // Original authentication is preserved
         assertThat(SecurityContextHolder.getContext().getAuthentication().getPrincipal())
                 .isEqualTo("existing-user");
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Token errors — silent failure, request continues unauthenticated
-    // ─────────────────────────────────────────────────────────────────────────
 
     @Test
     void doFilter_jwtException_proceedsUnauthenticatedWithoutThrowing() throws Exception {

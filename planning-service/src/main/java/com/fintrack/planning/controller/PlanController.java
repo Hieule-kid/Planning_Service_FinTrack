@@ -30,15 +30,10 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /**
- * REST controller for the Financial Planning feature — savings goal creation,
- * milestone tracking, and deficit redistribution.
+ * REST controller for the Financial Planning feature.
  *
- * <p>Base path: {@code /api/v1/plans}. Every endpoint requires a valid JWT issued
- * by {@code auth-service}; the authenticated user's ID is injected via
- * {@link AuthenticationPrincipal} and used to enforce per-user ownership.
+ * <p>Base path: {@code /api/v1/plans}.
  *
- * @author FinTrack Team
- * @since 1.0.0
  */
 @RestController
 @RequestMapping("/api/v1/plans")

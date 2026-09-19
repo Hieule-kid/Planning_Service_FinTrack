@@ -9,10 +9,6 @@ import lombok.Setter;
 import java.math.BigDecimal;
 
 /**
- * Request payload for updating the amount actually saved towards a milestone.
- *
- * @author FinTrack Team
- * @since 1.0.0
  */
 @Getter
 @Setter

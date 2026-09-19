@@ -11,8 +11,6 @@ import org.springframework.data.jpa.repository.config.EnableJpaAuditing;
  * {@code PlanningServiceApplication}) so that {@code @WebMvcTest} slices — which only
  * scan web-layer beans — don't attempt to initialize the full JPA auditing stack.
  *
- * @author FinTrack Team
- * @since 1.0.0
  */
 @Configuration
 @EnableJpaAuditing

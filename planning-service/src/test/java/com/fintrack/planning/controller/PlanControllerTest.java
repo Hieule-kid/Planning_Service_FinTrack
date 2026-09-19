@@ -36,11 +36,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * MockMvc tests for {@link PlanController} — covers all endpoints plus
- * JWT authentication/rejection behaviour enforced by {@link SecurityConfig}.
+ * MockMvc tests for {@link PlanController}.
  *
- * @author FinTrack Team
- * @since 1.0.0
  */
 @WebMvcTest(controllers = PlanController.class)
 @Import({SecurityConfig.class, GlobalExceptionHandler.class})
@@ -56,10 +53,6 @@ class PlanControllerTest {
 
     @MockBean private PlanService planService;
     @MockBean private JwtService  jwtService;
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Auth rejection
-    // ─────────────────────────────────────────────────────────────────────────
 
     @Test
     void getPlan_withoutAuthorizationHeader_returns401() throws Exception {
@@ -82,15 +75,11 @@ class PlanControllerTest {
                 .andExpect(status().isUnauthorized());
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // POST /api/v1/plans — createPlan
-    // ─────────────────────────────────────────────────────────────────────────
-
     @Test
     void createPlan_withInvalidPayload_returns400() throws Exception {
         when(jwtService.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
 
-        CreatePlanRequest request = new CreatePlanRequest(); // all required fields missing
+        CreatePlanRequest request = new CreatePlanRequest();
 
         mockMvc.perform(post("/api/v1/plans")
                         .header("Authorization", "Bearer " + VALID_TOKEN)
@@ -98,10 +87,6 @@ class PlanControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // GET /api/v1/plans — listPlans
-    // ─────────────────────────────────────────────────────────────────────────
 
     @Test
     void listPlans_withValidToken_returns200() throws Exception {
@@ -125,10 +110,6 @@ class PlanControllerTest {
                         .header("Authorization", "Bearer " + VALID_TOKEN))
                 .andExpect(status().isOk());
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // GET /api/v1/plans/{planId} — getPlan
-    // ─────────────────────────────────────────────────────────────────────────
 
     @Test
     void getPlan_withValidToken_returns200() throws Exception {
@@ -172,10 +153,6 @@ class PlanControllerTest {
                 .andExpect(status().isForbidden());
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // PATCH /api/v1/plans/{planId}/milestones/{milestoneId} — updateMilestone
-    // ─────────────────────────────────────────────────────────────────────────
-
     @Test
     void updateMilestone_withValidToken_returns200() throws Exception {
         when(jwtService.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
@@ -204,7 +181,7 @@ class PlanControllerTest {
     void updateMilestone_withMissingBody_returns400() throws Exception {
         when(jwtService.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
 
-        UpdateMilestoneRequest req = new UpdateMilestoneRequest(); // actualSaved is null
+        UpdateMilestoneRequest req = new UpdateMilestoneRequest();
 
         mockMvc.perform(patch("/api/v1/plans/" + PLAN_ID + "/milestones/" + MS_ID)
                         .header("Authorization", "Bearer " + VALID_TOKEN)
@@ -228,10 +205,6 @@ class PlanControllerTest {
                         .content(objectMapper.writeValueAsString(req)))
                 .andExpect(status().isNotFound());
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // POST /api/v1/plans/{planId}/milestones/{milestoneId}/complete
-    // ─────────────────────────────────────────────────────────────────────────
 
     @Test
     void completeMilestone_withValidToken_returns200() throws Exception {
@@ -263,10 +236,6 @@ class PlanControllerTest {
                 .andExpect(status().isNotFound());
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // POST /api/v1/plans/{planId}/milestones/{milestoneId}/undo
-    // ─────────────────────────────────────────────────────────────────────────
-
     @Test
     void undoMilestone_withValidToken_returns200() throws Exception {
         when(jwtService.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
@@ -297,10 +266,6 @@ class PlanControllerTest {
                 .andExpect(status().isForbidden());
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // PATCH /api/v1/plans/{planId}/settings — updateSettings
-    // ─────────────────────────────────────────────────────────────────────────
-
     @Test
     void updateSettings_enableRedistribution_returns200() throws Exception {
         when(jwtService.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
@@ -329,7 +294,7 @@ class PlanControllerTest {
     void updateSettings_withMissingField_returns400() throws Exception {
         when(jwtService.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
 
-        ToggleRecalculateRequest req = new ToggleRecalculateRequest(); // recalculateOnMissedDeadline is null
+        ToggleRecalculateRequest req = new ToggleRecalculateRequest();
 
         mockMvc.perform(patch("/api/v1/plans/" + PLAN_ID + "/settings")
                         .header("Authorization", "Bearer " + VALID_TOKEN)
@@ -353,10 +318,6 @@ class PlanControllerTest {
                         .content(objectMapper.writeValueAsString(req)))
                 .andExpect(status().isNotFound());
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // DELETE /api/v1/plans/{planId} — deletePlan
-    // ─────────────────────────────────────────────────────────────────────────
 
     @Test
     void deletePlan_withValidToken_returns204() throws Exception {

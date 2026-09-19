@@ -9,10 +9,6 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * Request payload for creating a user-defined expense category.
- *
- * @author FinTrack Team
- * @since 1.0.0
  */
 @Getter
 @Setter

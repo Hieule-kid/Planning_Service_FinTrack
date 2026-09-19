@@ -13,11 +13,8 @@ import java.time.LocalDate;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Bean Validation tests for {@link CreateExpenseRequest} — the constraints the
- * controller enforces via {@code @Valid} before the service is reached.
+ * Bean Validation tests for {@link CreateExpenseRequest}.
  *
- * @author FinTrack Team
- * @since 1.0.0
  */
 class CreateExpenseRequestValidationTest {
 

@@ -18,18 +18,12 @@ import java.util.List;
 /**
  * Default implementation of {@link ExpenseCategoryService}.
  *
- * @author FinTrack Team
- * @since 1.0.0
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class ExpenseCategoryServiceImpl implements ExpenseCategoryService {
 
-    /**
-     * The categories seeded the first time a user reads their category list.
-     * Order is preserved in the response.
-     */
     private static final List<SeedCategory> SYSTEM_DEFAULTS = List.of(
             new SeedCategory("Rent", ExpenseType.FIXED),
             new SeedCategory("Utilities", ExpenseType.FIXED),
@@ -96,7 +90,6 @@ public class ExpenseCategoryServiceImpl implements ExpenseCategoryService {
                 .build();
     }
 
-    /** Immutable description of one system-default category. */
     private record SeedCategory(String name, ExpenseType defaultType) {
     }
 }

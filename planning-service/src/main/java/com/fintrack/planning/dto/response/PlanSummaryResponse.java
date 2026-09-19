@@ -15,11 +15,6 @@ import java.time.LocalDate;
 /**
  * Lightweight summary view of a plan, used by the plan-listing endpoint.
  *
- * <p>Omits the full milestone list to keep {@code GET /api/v1/plans} cheap;
- * fetch {@code GET /api/v1/plans/{planId}} for the full {@link PlanResponse}.
- *
- * @author FinTrack Team
- * @since 1.0.0
  */
 @Getter
 @Builder

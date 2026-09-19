@@ -13,8 +13,6 @@ import java.time.LocalDate;
 /**
  * Outbound view of an {@link com.fintrack.planning.model.Expense}.
  *
- * @author FinTrack Team
- * @since 1.0.0
  */
 @Getter
 @Builder

@@ -15,11 +15,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Unit tests for {@link JwtService} — validates JWT parsing, claim extraction,
- * fallback to subject, and rejection of invalid/expired tokens.
+ * Unit tests for {@link JwtService}.
  *
- * @author FinTrack Team
- * @since 1.0.0
  */
 class JwtServiceTest {
 
@@ -33,10 +30,6 @@ class JwtServiceTest {
         jwtService = new JwtService();
         ReflectionTestUtils.setField(jwtService, "secret", SECRET);
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // extractUserId — happy paths
-    // ─────────────────────────────────────────────────────────────────────────
 
     @Test
     void extractUserId_returnsUserIdFromClaim() {
@@ -62,10 +55,6 @@ class JwtServiceTest {
         String token = buildToken("claim-user", "subject-user", futureExpiry());
         assertThat(jwtService.extractUserId(token)).isEqualTo("claim-user");
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // extractUserId — rejection paths
-    // ─────────────────────────────────────────────────────────────────────────
 
     @Test
     void extractUserId_throwsForExpiredToken() {
@@ -104,10 +93,6 @@ class JwtServiceTest {
         assertThatThrownBy(() -> jwtService.extractUserId(""))
                 .isInstanceOf(Exception.class);
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Helpers
-    // ─────────────────────────────────────────────────────────────────────────
 
     private String buildToken(String userId, String subject, Date expiry) {
         return Jwts.builder()

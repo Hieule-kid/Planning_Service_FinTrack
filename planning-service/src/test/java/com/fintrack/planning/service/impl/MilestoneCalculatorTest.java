@@ -18,18 +18,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Unit tests for {@link MilestoneCalculator} — the highest-risk pure business logic
- * in the Financial Planning feature: schedule generation, live status derivation,
- * and deficit redistribution.
+ * Unit tests for {@link MilestoneCalculator}.
  *
- * @author FinTrack Team
- * @since 1.0.0
  */
 class MilestoneCalculatorTest {
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Schedule generation — happy paths
-    // ─────────────────────────────────────────────────────────────────────────
 
     @Test
     void generateSchedule_singleMilestone_longTermAnnual() {
@@ -252,10 +244,6 @@ class MilestoneCalculatorTest {
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Schedule generation — validation rejections
-    // ─────────────────────────────────────────────────────────────────────────
-
     @Test
     void generateSchedule_rejectsInvalidFrequencyForShortTerm() {
         CreatePlanRequest request = new CreatePlanRequest();
@@ -361,10 +349,6 @@ class MilestoneCalculatorTest {
                 .isInstanceOf(AppException.class);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Live status derivation
-    // ─────────────────────────────────────────────────────────────────────────
-
     @Test
     void deriveStatus_completedWhenActualSavedMeetsTarget() {
         MilestoneEntity milestone = milestone("100.00", "100.00", false, LocalDate.of(2027, 6, 1));
@@ -424,10 +408,6 @@ class MilestoneCalculatorTest {
         MilestoneStatus status = MilestoneCalculator.deriveStatus(milestone, new BigDecimal("100.00"), LocalDate.of(2027, 6, 1));
         assertThat(status).isEqualTo(MilestoneStatus.COMPLETED);
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Deficit redistribution
-    // ─────────────────────────────────────────────────────────────────────────
 
     @Test
     void computeLiveMilestones_emptyList_returnsEmptyList() {
@@ -578,10 +558,6 @@ class MilestoneCalculatorTest {
         assertThat(live.get(1).status()).isEqualTo(MilestoneStatus.PENDING);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Totals
-    // ─────────────────────────────────────────────────────────────────────────
-
     @Test
     void computeTotals_sumsOnlyCompletedMilestonesAndClampsProgress() {
         LocalDate now = LocalDate.of(2027, 3, 1);
@@ -701,10 +677,6 @@ class MilestoneCalculatorTest {
         MilestoneCalculator.PlanTotals totals = MilestoneCalculator.computeTotals(live, new BigDecimal(target));
         assertThat(totals.progressPercent()).isEqualByComparingTo(expectedPercent);
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Test fixture helper
-    // ─────────────────────────────────────────────────────────────────────────
 
     private static MilestoneEntity milestone(String baseTarget, String actualSaved, boolean manuallyCompleted,
                                               LocalDate deadline) {

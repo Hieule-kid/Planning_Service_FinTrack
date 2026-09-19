@@ -9,10 +9,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Unit tests for {@link PlanCategory}.
- *
- * @author FinTrack Team
- * @since 1.0.0
  */
 class PlanCategoryTest {
 

@@ -10,8 +10,6 @@ import lombok.NoArgsConstructor;
 /**
  * Outbound view of an {@link com.fintrack.planning.model.ExpenseCategory}.
  *
- * @author FinTrack Team
- * @since 1.0.0
  */
 @Getter
 @Builder
@@ -25,7 +23,6 @@ public class ExpenseCategoryResponse {
 
     private ExpenseType defaultType;
 
-    /** {@code true} for auto-seeded defaults, {@code false} for user-created categories. */
     @JsonProperty("isSystem")
     private boolean system;
 }
