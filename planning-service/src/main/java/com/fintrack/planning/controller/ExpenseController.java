@@ -5,6 +5,7 @@ import com.fintrack.core.dto.PageResponse;
 import com.fintrack.planning.dto.request.CreateExpenseRequest;
 import com.fintrack.planning.dto.request.UpdateExpenseRequest;
 import com.fintrack.planning.dto.response.ExpenseResponse;
+import com.fintrack.planning.dto.response.PlanExpenseSummaryResponse;
 import com.fintrack.planning.model.enums.ExpenseType;
 import com.fintrack.planning.service.ExpenseService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -86,7 +87,8 @@ public class ExpenseController {
         return ResponseEntity.ok(ApiResponse.success(result));
     }
 
-    @Operation(summary = "Partially update an expense", description = "PATCH semantics — only the supplied fields change. The only place to override the fixed/variable type.")
+    @Operation(summary = "Partially update an expense", description = "PATCH semantics — only the supplied fields change. The only place to override the fixed/variable type. "
+            + "Set 'unlinkPlan' to remove an existing plan association (a null 'planId' alone is not enough to clear it).")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Expense updated"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Validation error or future date"),
@@ -100,6 +102,25 @@ public class ExpenseController {
             @Valid @RequestBody UpdateExpenseRequest request) {
         ExpenseResponse response = expenseService.updateExpense(userId, expenseId, request);
         return ResponseEntity.ok(ApiResponse.success(response, "Expense updated"));
+    }
+
+    @Operation(
+        summary = "Get a plan's linked-expense spending summary",
+        description = "Total of the plan's linked expenses, restricted to the plan's own currency — an expense "
+                + "recorded in a different currency has no conversion rate to sum against the plan, so it is "
+                + "excluded from the total and counted separately in 'excludedCount' rather than mixed in."
+    )
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Summary returned"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Missing planId"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Missing or invalid JWT"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Plan not found or belongs to another user")
+    })
+    @GetMapping("/summary")
+    public ResponseEntity<ApiResponse<PlanExpenseSummaryResponse>> getPlanExpenseSummary(
+            @AuthenticationPrincipal String userId,
+            @RequestParam String planId) {
+        return ResponseEntity.ok(ApiResponse.success(expenseService.getPlanExpenseSummary(userId, planId)));
     }
 
     @Operation(summary = "Delete an expense", description = "Soft delete — the row is retained as financial history but excluded from all reads.")

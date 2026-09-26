@@ -39,6 +39,9 @@ public class UpdateExpenseRequest {
     @Size(max = 255, message = "Note must not exceed 255 characters")
     private String note;
 
-    @Schema(description = "New plan association; not cleared when null (omitted)")
+    @Schema(description = "New plan association; not cleared when null (omitted) — use 'unlinkPlan' to clear it")
     private String planId;
+
+    @Schema(description = "Set true to remove this expense's plan association. Ignored if 'planId' is also supplied.")
+    private Boolean unlinkPlan;
 }

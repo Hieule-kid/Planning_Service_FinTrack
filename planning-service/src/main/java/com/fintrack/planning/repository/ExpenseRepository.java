@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Optional;
 
@@ -57,4 +58,41 @@ public interface ExpenseRepository extends JpaRepository<Expense, String> {
                          @Param("type") ExpenseType type,
                          @Param("categoryId") String categoryId,
                          Pageable pageable);
+
+    /**
+     * Total number of non-deleted expenses linked to a plan, regardless of currency.
+     */
+    @Query("""
+            SELECT COUNT(e) FROM Expense e
+            WHERE e.userId = :userId AND e.planId = :planId AND e.deleted = false
+            """)
+    long countByUserIdAndPlanId(@Param("userId") String userId, @Param("planId") String planId);
+
+    /**
+     * Number of non-deleted expenses linked to a plan whose currency matches the given one.
+     *
+     * <p>Used alongside {@link #sumAmountByUserIdAndPlanIdAndCurrency} — a plan's spend total is
+     * only meaningful when every summed expense shares the plan's currency, so callers compare
+     * this against {@link #countByUserIdAndPlanId} to report how many rows were excluded rather
+     * than silently mixing currencies into one sum.
+     */
+    @Query("""
+            SELECT COUNT(e) FROM Expense e
+            WHERE e.userId = :userId AND e.planId = :planId AND e.deleted = false AND e.currency = :currency
+            """)
+    long countByUserIdAndPlanIdAndCurrency(@Param("userId") String userId,
+                                           @Param("planId") String planId,
+                                           @Param("currency") String currency);
+
+    /**
+     * Sum of non-deleted expenses linked to a plan whose currency matches the given one.
+     * Returns {@link BigDecimal#ZERO} rather than {@code null} when there are none.
+     */
+    @Query("""
+            SELECT COALESCE(SUM(e.amount), 0) FROM Expense e
+            WHERE e.userId = :userId AND e.planId = :planId AND e.deleted = false AND e.currency = :currency
+            """)
+    BigDecimal sumAmountByUserIdAndPlanIdAndCurrency(@Param("userId") String userId,
+                                                      @Param("planId") String planId,
+                                                      @Param("currency") String currency);
 }
