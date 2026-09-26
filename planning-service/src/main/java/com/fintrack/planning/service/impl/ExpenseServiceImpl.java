@@ -7,6 +7,7 @@ import com.fintrack.planning.dto.DateRange;
 import com.fintrack.planning.dto.request.CreateExpenseRequest;
 import com.fintrack.planning.dto.request.UpdateExpenseRequest;
 import com.fintrack.planning.dto.response.ExpenseResponse;
+import com.fintrack.planning.dto.response.PlanExpenseSummaryResponse;
 import com.fintrack.planning.model.Expense;
 import com.fintrack.planning.model.ExpenseCategory;
 import com.fintrack.planning.model.PlanEntity;
@@ -25,6 +26,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 
 /**
@@ -116,7 +118,9 @@ public class ExpenseServiceImpl implements ExpenseService {
         if (request.getNote() != null) {
             expense.setNote(request.getNote());
         }
-        if (request.getPlanId() != null) {
+        if (Boolean.TRUE.equals(request.getUnlinkPlan())) {
+            expense.setPlanId(null);
+        } else if (request.getPlanId() != null) {
             verifyPlanOwnership(userId, request.getPlanId());
             expense.setPlanId(request.getPlanId());
         }
@@ -136,6 +140,29 @@ public class ExpenseServiceImpl implements ExpenseService {
         expense.setDeleted(true);
         expenseRepository.save(expense);
         log.info("Soft-deleted expense: id={}, userId={}", expenseId, userId);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public PlanExpenseSummaryResponse getPlanExpenseSummary(String userId, String planId) {
+        PlanEntity plan = verifyPlanOwnership(userId, planId);
+        String planCurrency = plan.getCurrency().name();
+
+        long totalCount = expenseRepository.countByUserIdAndPlanId(userId, planId);
+        long matchedCount = expenseRepository.countByUserIdAndPlanIdAndCurrency(userId, planId, planCurrency);
+        BigDecimal totalSpent =
+                expenseRepository.sumAmountByUserIdAndPlanIdAndCurrency(userId, planId, planCurrency);
+
+        return PlanExpenseSummaryResponse.builder()
+                .planId(planId)
+                .currency(planCurrency)
+                .totalSpent(totalSpent)
+                .expenseCount(matchedCount)
+                .excludedCount(totalCount - matchedCount)
+                .build();
     }
 
     private void rejectFutureDate(LocalDate spentOn) {
@@ -167,7 +194,7 @@ public class ExpenseServiceImpl implements ExpenseService {
         return expense;
     }
 
-    private void verifyPlanOwnership(String userId, String planId) {
+    private PlanEntity verifyPlanOwnership(String userId, String planId) {
         PlanEntity plan = planRepository.findById(planId)
                 .orElseThrow(() -> new AppException(ErrorCode.EXPENSE_PLAN_MISMATCH,
                         "Linked plan not found with id: " + planId));
@@ -176,6 +203,7 @@ public class ExpenseServiceImpl implements ExpenseService {
             throw new AppException(ErrorCode.EXPENSE_PLAN_MISMATCH,
                     "Linked plan does not belong to the current user");
         }
+        return plan;
     }
 
     private ExpenseResponse toResponse(Expense expense) {

@@ -3,10 +3,13 @@ package com.fintrack.planning.service.impl;
 import com.fintrack.core.exception.AppException;
 import com.fintrack.core.exception.ErrorCode;
 import com.fintrack.planning.dto.request.CreateExpenseRequest;
+import com.fintrack.planning.dto.request.UpdateExpenseRequest;
 import com.fintrack.planning.dto.response.ExpenseResponse;
+import com.fintrack.planning.dto.response.PlanExpenseSummaryResponse;
 import com.fintrack.planning.model.Expense;
 import com.fintrack.planning.model.ExpenseCategory;
 import com.fintrack.planning.model.PlanEntity;
+import com.fintrack.planning.model.enums.Currency;
 import com.fintrack.planning.model.enums.ExpenseType;
 import com.fintrack.planning.repository.ExpenseCategoryRepository;
 import com.fintrack.planning.repository.ExpenseRepository;
@@ -146,6 +149,127 @@ class ExpenseServiceImplTest {
                 .isEqualTo(ErrorCode.PARTIAL_DATE_RANGE);
 
         verify(expenseRepository, never()).search(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void updateExpense_unlinkPlan_clearsExistingAssociation() {
+        Expense expense = existingExpense(PLAN_ID);
+        when(expenseRepository.findByIdAndDeletedFalse("exp-1")).thenReturn(Optional.of(expense));
+        when(expenseRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        UpdateExpenseRequest request = new UpdateExpenseRequest();
+        request.setUnlinkPlan(true);
+
+        ExpenseResponse response = expenseService.updateExpense(USER_ID, "exp-1", request);
+
+        assertThat(response.getPlanId()).isNull();
+        verify(planRepository, never()).findById(any());
+    }
+
+    @Test
+    void updateExpense_planIdOmitted_leavesExistingAssociationUnchanged() {
+        Expense expense = existingExpense(PLAN_ID);
+        when(expenseRepository.findByIdAndDeletedFalse("exp-1")).thenReturn(Optional.of(expense));
+        when(expenseRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        UpdateExpenseRequest request = new UpdateExpenseRequest();
+        request.setNote("Updated note");
+
+        ExpenseResponse response = expenseService.updateExpense(USER_ID, "exp-1", request);
+
+        assertThat(response.getPlanId()).isEqualTo(PLAN_ID);
+    }
+
+    @Test
+    void updateExpense_newPlanOwnedByAnotherUser_isRejected() {
+        Expense expense = existingExpense(null);
+        when(expenseRepository.findByIdAndDeletedFalse("exp-1")).thenReturn(Optional.of(expense));
+        PlanEntity foreignPlan = new PlanEntity();
+        foreignPlan.setUserId(OTHER_ID);
+        when(planRepository.findById(PLAN_ID)).thenReturn(Optional.of(foreignPlan));
+
+        UpdateExpenseRequest request = new UpdateExpenseRequest();
+        request.setPlanId(PLAN_ID);
+
+        assertThatThrownBy(() -> expenseService.updateExpense(USER_ID, "exp-1", request))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.EXPENSE_PLAN_MISMATCH);
+
+        verify(expenseRepository, never()).save(any());
+    }
+
+    @Test
+    void getPlanExpenseSummary_planNotFound_isRejected() {
+        when(planRepository.findById(PLAN_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> expenseService.getPlanExpenseSummary(USER_ID, PLAN_ID))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.EXPENSE_PLAN_MISMATCH);
+
+        verify(expenseRepository, never()).sumAmountByUserIdAndPlanIdAndCurrency(any(), any(), any());
+    }
+
+    @Test
+    void getPlanExpenseSummary_planOwnedByAnotherUser_isRejected() {
+        when(planRepository.findById(PLAN_ID)).thenReturn(Optional.of(plan(OTHER_ID, Currency.USD)));
+
+        assertThatThrownBy(() -> expenseService.getPlanExpenseSummary(USER_ID, PLAN_ID))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.EXPENSE_PLAN_MISMATCH);
+    }
+
+    @Test
+    void getPlanExpenseSummary_excludesExpensesInADifferentCurrencyFromTheTotal() {
+        when(planRepository.findById(PLAN_ID)).thenReturn(Optional.of(plan(USER_ID, Currency.USD)));
+        when(expenseRepository.countByUserIdAndPlanId(USER_ID, PLAN_ID)).thenReturn(5L);
+        when(expenseRepository.countByUserIdAndPlanIdAndCurrency(USER_ID, PLAN_ID, "USD")).thenReturn(3L);
+        when(expenseRepository.sumAmountByUserIdAndPlanIdAndCurrency(USER_ID, PLAN_ID, "USD"))
+                .thenReturn(new BigDecimal("120.00"));
+
+        PlanExpenseSummaryResponse summary = expenseService.getPlanExpenseSummary(USER_ID, PLAN_ID);
+
+        assertThat(summary.getPlanId()).isEqualTo(PLAN_ID);
+        assertThat(summary.getCurrency()).isEqualTo("USD");
+        assertThat(summary.getTotalSpent()).isEqualByComparingTo("120.00");
+        assertThat(summary.getExpenseCount()).isEqualTo(3L);
+        assertThat(summary.getExcludedCount()).isEqualTo(2L);
+    }
+
+    @Test
+    void getPlanExpenseSummary_noLinkedExpenses_returnsZeroTotals() {
+        when(planRepository.findById(PLAN_ID)).thenReturn(Optional.of(plan(USER_ID, Currency.VND)));
+        when(expenseRepository.countByUserIdAndPlanId(USER_ID, PLAN_ID)).thenReturn(0L);
+        when(expenseRepository.countByUserIdAndPlanIdAndCurrency(USER_ID, PLAN_ID, "VND")).thenReturn(0L);
+        when(expenseRepository.sumAmountByUserIdAndPlanIdAndCurrency(USER_ID, PLAN_ID, "VND"))
+                .thenReturn(BigDecimal.ZERO);
+
+        PlanExpenseSummaryResponse summary = expenseService.getPlanExpenseSummary(USER_ID, PLAN_ID);
+
+        assertThat(summary.getTotalSpent()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(summary.getExpenseCount()).isZero();
+        assertThat(summary.getExcludedCount()).isZero();
+    }
+
+    private Expense existingExpense(String planId) {
+        return Expense.builder()
+                .userId(USER_ID)
+                .planId(planId)
+                .categoryId(CATEGORY_ID)
+                .amount(new BigDecimal("10.00"))
+                .currency("USD")
+                .expenseType(ExpenseType.VARIABLE)
+                .spentOn(LocalDate.now().minusDays(1))
+                .build();
+    }
+
+    private PlanEntity plan(String ownerId, Currency currency) {
+        PlanEntity plan = new PlanEntity();
+        plan.setUserId(ownerId);
+        plan.setCurrency(currency);
+        return plan;
     }
 
     private CreateExpenseRequest baseRequest() {
