@@ -35,7 +35,6 @@ public interface ExpenseRepository extends JpaRepository<Expense, String> {
      * @param userId     the owning user's ID
      * @param from       window start (inclusive)
      * @param to         window end (inclusive)
-     * @param planId     optional plan filter
      * @param type       optional fixed/variable filter
      * @param categoryId optional category filter
      * @param pageable   paging + sorting
@@ -46,14 +45,12 @@ public interface ExpenseRepository extends JpaRepository<Expense, String> {
             WHERE e.userId = :userId
               AND e.deleted = false
               AND e.spentOn BETWEEN :from AND :to
-              AND (:planId IS NULL OR e.planId = :planId)
               AND (:type IS NULL OR e.expenseType = :type)
               AND (:categoryId IS NULL OR e.categoryId = :categoryId)
             """)
     Page<Expense> search(@Param("userId") String userId,
                          @Param("from") LocalDate from,
                          @Param("to") LocalDate to,
-                         @Param("planId") String planId,
                          @Param("type") ExpenseType type,
                          @Param("categoryId") String categoryId,
                          Pageable pageable);
