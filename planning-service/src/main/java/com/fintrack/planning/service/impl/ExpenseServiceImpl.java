@@ -4,8 +4,10 @@ import com.fintrack.core.dto.PageResponse;
 import com.fintrack.core.exception.AppException;
 import com.fintrack.core.exception.ErrorCode;
 import com.fintrack.planning.dto.DateRange;
+import com.fintrack.planning.dto.request.CreateExpenseMultipleRequest;
 import com.fintrack.planning.dto.request.CreateExpenseRequest;
 import com.fintrack.planning.dto.request.UpdateExpenseRequest;
+import com.fintrack.planning.dto.response.CreateExpenseMultipleResponse;
 import com.fintrack.planning.dto.response.ExpenseResponse;
 import com.fintrack.planning.model.Expense;
 import com.fintrack.planning.model.ExpenseCategory;
@@ -26,6 +28,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /**
  * Default implementation of {@link ExpenseService}.
@@ -50,21 +60,7 @@ public class ExpenseServiceImpl implements ExpenseService {
 
         ExpenseCategory category = getOwnedCategoryOrThrow(userId, request.getCategoryId());
 
-        if (request.getPlanId() != null) {
-            verifyPlanOwnership(userId, request.getPlanId());
-        }
-
-        Expense expense = expenseRepository.save(Expense.builder()
-                .userId(userId)
-                .planId(request.getPlanId())
-                .categoryId(category.getId())
-                .amount(request.getAmount())
-                .currency(request.getCurrency())
-                .expenseType(category.getDefaultType())
-                .spentOn(request.getSpentOn())
-                .note(request.getNote())
-                .source(ExpenseSource.MANUAL)
-                .build());
+        Expense expense = expenseRepository.save(buildExpense(userId, request, category));
 
         log.info("Created expense: id={}, userId={}, categoryId={}", expense.getId(), userId, category.getId());
         return toResponse(expense);
@@ -82,7 +78,7 @@ public class ExpenseServiceImpl implements ExpenseService {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "spentOn"));
 
         Page<ExpenseResponse> result = expenseRepository
-                .search(userId, range.from(), range.to(), planId, type, categoryId, pageable)
+                .search(userId, range.from(), range.to(), type, categoryId, pageable)
                 .map(this::toResponse);
 
         return PageResponse.of(result);
@@ -116,10 +112,6 @@ public class ExpenseServiceImpl implements ExpenseService {
         if (request.getNote() != null) {
             expense.setNote(request.getNote());
         }
-        if (request.getPlanId() != null) {
-            verifyPlanOwnership(userId, request.getPlanId());
-            expense.setPlanId(request.getPlanId());
-        }
 
         expenseRepository.save(expense);
         log.info("Updated expense: id={}, userId={}", expenseId, userId);
@@ -136,6 +128,83 @@ public class ExpenseServiceImpl implements ExpenseService {
         expense.setDeleted(true);
         expenseRepository.save(expense);
         log.info("Soft-deleted expense: id={}, userId={}", expenseId, userId);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    @Transactional
+    public CreateExpenseMultipleResponse createExpenseMultiple(String userId, CreateExpenseMultipleRequest request) {
+        List<CreateExpenseRequest> rows = request.getExpenses();
+        Map<String, ExpenseCategory> categoriesById = findCategoriesByIdIn(rows);
+
+        List<String> errors = collectRowErrors(userId, rows, categoriesById);
+        if (!errors.isEmpty()) {
+            throw new AppException(ErrorCode.VALIDATION_ERROR, String.join("; ", errors));
+        }
+
+        List<Expense> toSave = rows.stream()
+                .map(row -> buildExpense(userId, row, categoriesById.get(row.getCategoryId())))
+                .toList();
+        List<Expense> saved = expenseRepository.saveAll(toSave);
+        log.info("Bulk-created {} expenses for userId={}", saved.size(), userId);
+
+        return CreateExpenseMultipleResponse.builder()
+                .expenseResponses(saved.stream().map(this::toResponse).toList())
+                .build();
+    }
+
+    private Map<String, ExpenseCategory> findCategoriesByIdIn(List<CreateExpenseRequest> rows) {
+        Set<String> categoryIds = rows.stream()
+                .map(CreateExpenseRequest::getCategoryId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        return expenseCategoryRepository.findAllById(categoryIds).stream()
+                .collect(Collectors.toMap(ExpenseCategory::getId, Function.identity()));
+    }
+
+    /**
+     * Validates every row up front so a batch failure reports every offending row at once,
+     * rather than stopping at the first one.
+     */
+    private List<String> collectRowErrors(String userId, List<CreateExpenseRequest> rows,
+                                           Map<String, ExpenseCategory> categoriesById) {
+        return IntStream.range(0, rows.size())
+                .mapToObj(i -> validateRow(userId, rows.get(i), categoriesById)
+                        .map(error -> "Row " + (i + 1) + ": " + error))
+                .flatMap(Optional::stream)
+                .toList();
+    }
+
+    /**
+     * @return the row's failure reason, or empty if the row is valid.
+     */
+    private Optional<String> validateRow(String userId, CreateExpenseRequest row,
+                                          Map<String, ExpenseCategory> categoriesById) {
+        if (row.getSpentOn() != null && row.getSpentOn().isAfter(LocalDate.now())) {
+            return Optional.of("Expense date cannot be in the future");
+        }
+
+        ExpenseCategory category = categoriesById.get(row.getCategoryId());
+        if (category == null || category.isDeleted() || !category.getUserId().equals(userId)) {
+            return Optional.of("Expense category not found with id: " + row.getCategoryId());
+        }
+
+        return Optional.empty();
+    }
+
+    private Expense buildExpense(String userId, CreateExpenseRequest row, ExpenseCategory category) {
+        return Expense.builder()
+                .userId(userId)
+                .categoryId(category.getId())
+                .amount(row.getAmount())
+                .currency(row.getCurrency())
+                .expenseType(category.getDefaultType())
+                .spentOn(row.getSpentOn())
+                .note(row.getNote())
+                .source(ExpenseSource.MANUAL)
+                .build();
     }
 
     private void rejectFutureDate(LocalDate spentOn) {
@@ -181,7 +250,6 @@ public class ExpenseServiceImpl implements ExpenseService {
     private ExpenseResponse toResponse(Expense expense) {
         return ExpenseResponse.builder()
                 .id(expense.getId())
-                .planId(expense.getPlanId())
                 .categoryId(expense.getCategoryId())
                 .amount(expense.getAmount())
                 .currency(expense.getCurrency())

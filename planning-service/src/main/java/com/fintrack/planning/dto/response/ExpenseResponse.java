@@ -21,7 +21,6 @@ import java.time.LocalDate;
 public class ExpenseResponse {
 
     private String id;
-    private String planId;
     private String categoryId;
     private BigDecimal amount;
     private String currency;

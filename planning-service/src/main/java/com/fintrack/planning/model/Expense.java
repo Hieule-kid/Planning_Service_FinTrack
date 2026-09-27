@@ -28,7 +28,7 @@ import java.time.LocalDate;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@EqualsAndHashCode(of = "id", callSuper = false)
+@EqualsAndHashCode(callSuper = false)
 @Entity
 @Table(
     name = "expenses",
@@ -40,9 +40,6 @@ public class Expense extends BaseEntity {
 
     @Column(name = "user_id", nullable = false, length = 36, updatable = false)
     private String userId;
-
-    @Column(name = "plan_id", length = 36)
-    private String planId;
 
     @Column(name = "category_id", nullable = false, length = 36)
     private String categoryId;

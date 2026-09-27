@@ -2,8 +2,10 @@ package com.fintrack.planning.controller;
 
 import com.fintrack.core.dto.ApiResponse;
 import com.fintrack.core.dto.PageResponse;
+import com.fintrack.planning.dto.request.CreateExpenseMultipleRequest;
 import com.fintrack.planning.dto.request.CreateExpenseRequest;
 import com.fintrack.planning.dto.request.UpdateExpenseRequest;
+import com.fintrack.planning.dto.response.CreateExpenseMultipleResponse;
 import com.fintrack.planning.dto.response.ExpenseResponse;
 import com.fintrack.planning.model.enums.ExpenseType;
 import com.fintrack.planning.service.ExpenseService;
@@ -27,6 +29,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
+import java.util.List;
 
 /**
  * REST controller for recording and querying expenses.
@@ -115,4 +118,23 @@ public class ExpenseController {
         expenseService.deleteExpense(userId, expenseId);
         return ResponseEntity.noContent().build();
     }
+
+    @Operation(
+            summary = "Record multiple expenses at once",
+            description = "All-or-nothing: every row is validated first, and if any row fails, nothing is saved "
+                    + "and every row's failure reason is returned together. Up to 50 rows per request."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "All expenses recorded"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Validation error, future date, or more than 50 rows"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Missing or invalid JWT")
+    })
+    @PostMapping("/multiple")
+    public ResponseEntity<ApiResponse<CreateExpenseMultipleResponse>> createExpenseMultiple(
+            @AuthenticationPrincipal String userId,
+            @Valid @RequestBody CreateExpenseMultipleRequest requests) {
+        CreateExpenseMultipleResponse response = expenseService.createExpenseMultiple(userId, requests);
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(response));
+    }
+
 }
