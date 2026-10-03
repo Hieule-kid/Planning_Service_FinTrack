@@ -20,11 +20,26 @@ public class JwtService {
     @Value("${fintrack.jwt.secret}")
     private String secret;
 
+    /**
+     * The local-development fallback from {@code application.yml}. It is public (it lives in the
+     * repository), so any token signed with it can be forged by anyone.
+     */
+    private static final String LOCAL_DEV_SECRET = "fintrack-local-development-jwt-secret-2026";
+
+    /** Injected by Render on every web service; empty when running locally. */
+    @Value("${RENDER_EXTERNAL_HOSTNAME:}")
+    private String renderHostname;
+
     @PostConstruct
     void validateSecret() {
         if (secret == null || secret.length() < 32 || secret.contains("change-me")) {
             throw new IllegalStateException(
                     "FINTRACK_JWT_SECRET must be set to an unpredictable value of at least 32 characters");
+        }
+        if (LOCAL_DEV_SECRET.equals(secret) && renderHostname != null && !renderHostname.isBlank()) {
+            throw new IllegalStateException(
+                    "FINTRACK_JWT_SECRET is not set: refusing to start on Render with the public "
+                            + "local-development JWT secret");
         }
     }
 

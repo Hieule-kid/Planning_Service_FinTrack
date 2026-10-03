@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Date;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
@@ -92,6 +93,46 @@ class JwtServiceTest {
     void extractUserId_throwsForEmptyString() {
         assertThatThrownBy(() -> jwtService.extractUserId(""))
                 .isInstanceOf(Exception.class);
+    }
+
+    // ── validateSecret: public local-development secret must never be used on Render ──
+
+    /** Same value as the fallback in application.yml (public, because it is in the repository). */
+    private static final String LOCAL_DEV_SECRET = "fintrack-local-development-jwt-secret-2026";
+
+    private static final String RENDER_HOSTNAME = "planning-service-fintrack.onrender.com";
+
+    @Test
+    void validateSecret_allowsLocalDevSecretWhenNotOnRender() {
+        ReflectionTestUtils.setField(jwtService, "secret", LOCAL_DEV_SECRET);
+        ReflectionTestUtils.setField(jwtService, "renderHostname", "");
+
+        assertThatCode(() -> jwtService.validateSecret()).doesNotThrowAnyException();
+    }
+
+    @Test
+    void validateSecret_rejectsLocalDevSecretOnRender() {
+        ReflectionTestUtils.setField(jwtService, "secret", LOCAL_DEV_SECRET);
+        ReflectionTestUtils.setField(jwtService, "renderHostname", RENDER_HOSTNAME);
+
+        assertThatThrownBy(() -> jwtService.validateSecret())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("FINTRACK_JWT_SECRET");
+    }
+
+    @Test
+    void validateSecret_acceptsCustomSecretOnRender() {
+        ReflectionTestUtils.setField(jwtService, "renderHostname", RENDER_HOSTNAME);
+
+        assertThatCode(() -> jwtService.validateSecret()).doesNotThrowAnyException();
+    }
+
+    @Test
+    void validateSecret_stillRejectsShortSecret() {
+        ReflectionTestUtils.setField(jwtService, "secret", "too-short");
+
+        assertThatThrownBy(() -> jwtService.validateSecret())
+                .isInstanceOf(IllegalStateException.class);
     }
 
     private String buildToken(String userId, String subject, Date expiry) {
