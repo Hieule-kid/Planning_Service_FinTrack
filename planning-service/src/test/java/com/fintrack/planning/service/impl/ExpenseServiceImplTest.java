@@ -10,6 +10,9 @@ import com.fintrack.planning.model.Expense;
 import com.fintrack.planning.model.ExpenseCategory;
 import com.fintrack.planning.model.enums.ExpenseType;
 import com.fintrack.planning.repository.ExpenseCategoryRepository;
+import com.fintrack.planning.dto.response.ExpenseCurrencySummaryResponse;
+import com.fintrack.planning.dto.response.ExpenseSummaryResponse;
+import com.fintrack.planning.repository.ExpenseCurrencyTotals;
 import com.fintrack.planning.repository.ExpenseRepository;
 import com.fintrack.planning.repository.PlanRepository;
 import org.junit.jupiter.api.Test;
@@ -99,9 +102,9 @@ class ExpenseServiceImplTest {
     }
 
     @Test
-    void listExpenses_31DayRange_passesResolvedWindowToRepository() {
-        LocalDate from = LocalDate.of(2026, 3, 1);
-        LocalDate to = from.plusDays(30);
+    void listExpenses_longRange_isPassedThroughWithoutACap() {
+        LocalDate from = LocalDate.of(2025, 1, 1);
+        LocalDate to = LocalDate.of(2026, 12, 31);
         when(expenseRepository.search(eq(USER_ID), eq(from), eq(to), isNull(), isNull(), any(Pageable.class)))
                 .thenReturn(Page.empty());
 
@@ -111,16 +114,13 @@ class ExpenseServiceImplTest {
     }
 
     @Test
-    void listExpenses_32DayRange_isRejectedBeforeQuery() {
-        LocalDate from = LocalDate.of(2026, 3, 1);
-        LocalDate to = from.plusDays(31);
+    void listExpenses_noDates_isUnbounded() {
+        when(expenseRepository.search(eq(USER_ID), isNull(), isNull(), isNull(), isNull(), any(Pageable.class)))
+                .thenReturn(Page.empty());
 
-        assertThatThrownBy(() -> expenseService.listExpenses(USER_ID, from, to, null, null, null, 0, 20))
-                .isInstanceOf(AppException.class)
-                .extracting(ex -> ((AppException) ex).getErrorCode())
-                .isEqualTo(ErrorCode.DATE_RANGE_TOO_LARGE);
+        expenseService.listExpenses(USER_ID, null, null, null, null, null, 0, 20);
 
-        verify(expenseRepository, never()).search(any(), any(), any(), any(), any(), any());
+        verify(expenseRepository).search(eq(USER_ID), isNull(), isNull(), isNull(), isNull(), any(Pageable.class));
     }
 
     @Test
@@ -132,6 +132,87 @@ class ExpenseServiceImplTest {
                 .isEqualTo(ErrorCode.PARTIAL_DATE_RANGE);
 
         verify(expenseRepository, never()).search(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void getSummary_mapsRowsPerCurrency() {
+        LocalDate from = LocalDate.of(2026, 3, 1);
+        LocalDate to = from.plusDays(30);
+        when(expenseRepository.summarizeByCurrency(USER_ID, from, to, null, null)).thenReturn(List.of(
+                totals("USD", 2, "50.00", "0", "50.00"),
+                totals("VND", 3, "5400000", "5000000", "400000")));
+
+        ExpenseSummaryResponse result = expenseService.getSummary(USER_ID, from, to, null, null);
+
+        assertThat(result.getTotals()).extracting(ExpenseCurrencySummaryResponse::getCurrency)
+                .containsExactly("USD", "VND");
+        ExpenseCurrencySummaryResponse vnd = result.getTotals().get(1);
+        assertThat(vnd.getCount()).isEqualTo(3);
+        assertThat(vnd.getTotal()).isEqualByComparingTo("5400000");
+        assertThat(vnd.getFixed()).isEqualByComparingTo("5000000");
+        assertThat(vnd.getVariable()).isEqualByComparingTo("400000");
+        // zero stays at the money scale instead of an unscaled "0"
+        assertThat(result.getTotals().get(0).getFixed().toPlainString()).isEqualTo("0.00");
+    }
+
+    @Test
+    void getSummary_echoesTheAppliedFilter() {
+        LocalDate from = LocalDate.of(2026, 9, 21);
+        LocalDate to = LocalDate.of(2026, 10, 11);
+        when(expenseRepository.summarizeByCurrency(USER_ID, from, to, ExpenseType.FIXED, "cat-1"))
+                .thenReturn(List.of());
+
+        ExpenseSummaryResponse result = expenseService.getSummary(USER_ID, from, to, ExpenseType.FIXED, "cat-1");
+
+        assertThat(result.getFrom()).isEqualTo(from);
+        assertThat(result.getTo()).isEqualTo(to);
+        assertThat(result.getType()).isEqualTo(ExpenseType.FIXED);
+        assertThat(result.getCategoryId()).isEqualTo("cat-1");
+        assertThat(result.getTotals()).isEmpty();
+    }
+
+    @Test
+    void getSummary_longRange_isAllowed() {
+        LocalDate from = LocalDate.of(2025, 1, 1);
+        LocalDate to = LocalDate.of(2026, 12, 31);
+        when(expenseRepository.summarizeByCurrency(USER_ID, from, to, null, null)).thenReturn(List.of());
+
+        ExpenseSummaryResponse result = expenseService.getSummary(USER_ID, from, to, null, null);
+
+        assertThat(result.getFrom()).isEqualTo(from);
+        assertThat(result.getTo()).isEqualTo(to);
+    }
+
+    @Test
+    void getSummary_onlyFromSupplied_isRejectedBeforeQuery() {
+        assertThatThrownBy(() -> expenseService.getSummary(USER_ID, LocalDate.of(2026, 3, 1), null, null, null))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.PARTIAL_DATE_RANGE);
+
+        verify(expenseRepository, never()).summarizeByCurrency(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void getSummary_noDates_isAllTimeAndEchoesNullBounds() {
+        when(expenseRepository.summarizeByCurrency(USER_ID, null, null, ExpenseType.FIXED, "cat-1"))
+                .thenReturn(List.of());
+
+        ExpenseSummaryResponse result = expenseService.getSummary(USER_ID, null, null, ExpenseType.FIXED, "cat-1");
+
+        verify(expenseRepository).summarizeByCurrency(USER_ID, null, null, ExpenseType.FIXED, "cat-1");
+        assertThat(result.getFrom()).isNull();
+        assertThat(result.getTo()).isNull();
+    }
+
+    private static ExpenseCurrencyTotals totals(String currency, long count, String total, String fixed, String variable) {
+        return new ExpenseCurrencyTotals() {
+            public String getCurrency() { return currency; }
+            public long getExpenseCount() { return count; }
+            public BigDecimal getTotal() { return new BigDecimal(total); }
+            public BigDecimal getFixed() { return new BigDecimal(fixed); }
+            public BigDecimal getVariable() { return new BigDecimal(variable); }
+        };
     }
 
     @Test

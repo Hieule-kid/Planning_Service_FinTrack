@@ -6,6 +6,7 @@ import com.fintrack.planning.dto.ai.AiPromptRequest;
 import com.fintrack.planning.dto.request.CreatePlanRequest;
 import com.fintrack.planning.dto.request.ToggleRecalculateRequest;
 import com.fintrack.planning.dto.request.UpdateMilestoneRequest;
+import com.fintrack.planning.dto.response.CurrencySummaryResponse;
 import com.fintrack.planning.dto.response.PlanResponse;
 import com.fintrack.planning.dto.response.PlanSummaryResponse;
 import com.fintrack.planning.service.PlanService;
@@ -69,6 +70,20 @@ public class PlanController {
     public ResponseEntity<ApiResponse<List<PlanSummaryResponse>>> listPlans(
             @AuthenticationPrincipal String userId) {
         return ResponseEntity.ok(ApiResponse.success(planService.listPlans(userId)));
+    }
+
+    @Operation(
+        summary = "Dashboard totals per currency",
+        description = "Total target, total saved and remaining across ALL of the caller's plans, one entry per currency (never combined). Independent of any list paging. Money is returned as strings."
+    )
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Summary returned (empty list when the user has no plans)"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Missing or invalid JWT")
+    })
+    @GetMapping("/summary")
+    public ResponseEntity<ApiResponse<List<CurrencySummaryResponse>>> getSummary(
+            @AuthenticationPrincipal String userId) {
+        return ResponseEntity.ok(ApiResponse.success(planService.getSummary(userId)));
     }
 
     @Operation(
