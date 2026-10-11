@@ -7,6 +7,7 @@ import com.fintrack.planning.dto.request.CreateExpenseRequest;
 import com.fintrack.planning.dto.request.UpdateExpenseRequest;
 import com.fintrack.planning.dto.response.CreateExpenseMultipleResponse;
 import com.fintrack.planning.dto.response.ExpenseResponse;
+import com.fintrack.planning.dto.response.ExpenseSummaryResponse;
 import com.fintrack.planning.model.enums.ExpenseType;
 import com.fintrack.planning.service.ExpenseService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -40,7 +41,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1/expenses")
 @RequiredArgsConstructor
-@Tag(name = "Expenses", description = "Record spending and query it over a date window")
+@Tag(name = "Expenses", description = "Record spending and query it, optionally over a date range")
 public class ExpenseController {
 
     private final ExpenseService expenseService;
@@ -65,13 +66,13 @@ public class ExpenseController {
     }
 
     @Operation(
-        summary = "List expenses in a date window",
-        description = "Defaults to the last 31 days when no dates are given. The window may not exceed 31 days; "
-                + "supply both 'from' and 'to' or neither."
+        summary = "List expenses, optionally within a date range",
+        description = "With no dates, lists all expenses. Supply both 'from' and 'to' (inclusive) or neither; "
+                + "there is no maximum span."
     )
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Expenses returned"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid or oversized date range"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid date range (only one date given, or end before start)"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Missing or invalid JWT")
     })
     @GetMapping
@@ -87,6 +88,28 @@ public class ExpenseController {
         PageResponse<ExpenseResponse> result =
                 expenseService.listExpenses(userId, from, to, planId, type, categoryId, page, size);
         return ResponseEntity.ok(ApiResponse.success(result));
+    }
+
+    @Operation(
+        summary = "Spent / fixed / variable totals, optionally for a date range",
+        description = "Totals per currency (never combined) over ALL expenses matching the same filters as the list "
+                + "endpoint, independent of its paging. Same date rules: both 'from' and 'to' or neither (neither = all "
+                + "time), no maximum span. The response echoes the applied filter (from/to/type/categoryId, null when "
+                + "unset) and returns money as strings."
+    )
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Summary returned (empty totals when nothing matches)"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid date range (only one date given, or end before start)"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Missing or invalid JWT")
+    })
+    @GetMapping("/summary")
+    public ResponseEntity<ApiResponse<ExpenseSummaryResponse>> getSummary(
+            @AuthenticationPrincipal String userId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) ExpenseType type,
+            @RequestParam(required = false) String categoryId) {
+        return ResponseEntity.ok(ApiResponse.success(expenseService.getSummary(userId, from, to, type, categoryId)));
     }
 
     @Operation(summary = "Partially update an expense", description = "PATCH semantics — only the supplied fields change. The only place to override the fixed/variable type.")

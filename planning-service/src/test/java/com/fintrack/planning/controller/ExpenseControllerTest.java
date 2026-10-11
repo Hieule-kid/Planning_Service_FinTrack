@@ -9,6 +9,8 @@ import com.fintrack.planning.dto.request.CreateExpenseMultipleRequest;
 import com.fintrack.planning.dto.request.CreateExpenseRequest;
 import com.fintrack.planning.dto.response.CreateExpenseMultipleResponse;
 import com.fintrack.planning.dto.response.ExpenseResponse;
+import com.fintrack.planning.dto.response.ExpenseCurrencySummaryResponse;
+import com.fintrack.planning.dto.response.ExpenseSummaryResponse;
 import com.fintrack.planning.model.enums.ExpenseSource;
 import com.fintrack.planning.model.enums.ExpenseType;
 import com.fintrack.planning.service.ExpenseService;
@@ -28,6 +30,7 @@ import java.util.List;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -61,6 +64,56 @@ class ExpenseControllerTest {
                         .content(objectMapper.writeValueAsString(validRow())))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.id").value("exp-1"));
+    }
+
+    @Test
+    void getSummary_withoutAuthorizationHeader_returns401() throws Exception {
+        mockMvc.perform(get("/api/v1/expenses/summary"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void getSummary_withValidToken_returnsPerCurrencyTotalsAsStrings() throws Exception {
+        when(jwtService.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
+        when(expenseService.getSummary(eq(USER_ID), eq(LocalDate.of(2026, 3, 1)), eq(LocalDate.of(2026, 3, 31)),
+                eq(ExpenseType.FIXED), eq(CATEGORY_ID)))
+                .thenReturn(ExpenseSummaryResponse.builder()
+                        .from(LocalDate.of(2026, 3, 1)).to(LocalDate.of(2026, 3, 31))
+                        .type(ExpenseType.FIXED).categoryId(CATEGORY_ID)
+                        .totals(List.of(ExpenseCurrencySummaryResponse.builder()
+                                .currency("VND").count(3)
+                                .total(new BigDecimal("5400000.00"))
+                                .fixed(new BigDecimal("5000000.00"))
+                                .variable(new BigDecimal("400000.00"))
+                                .build()))
+                        .build());
+
+        mockMvc.perform(get("/api/v1/expenses/summary")
+                        .param("from", "2026-03-01").param("to", "2026-03-31")
+                        .param("type", "FIXED").param("categoryId", CATEGORY_ID)
+                        .header("Authorization", "Bearer " + VALID_TOKEN))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.from").value("2026-03-01"))
+                .andExpect(jsonPath("$.data.to").value("2026-03-31"))
+                .andExpect(jsonPath("$.data.type").value("FIXED"))
+                .andExpect(jsonPath("$.data.categoryId").value(CATEGORY_ID))
+                .andExpect(jsonPath("$.data.totals[0].currency").value("VND"))
+                .andExpect(jsonPath("$.data.totals[0].count").value(3))
+                .andExpect(jsonPath("$.data.totals[0].total").value("5400000.00"))
+                .andExpect(jsonPath("$.data.totals[0].fixed").value("5000000.00"))
+                .andExpect(jsonPath("$.data.totals[0].variable").value("400000.00"));
+    }
+
+    @Test
+    void getSummary_invalidRange_returns400() throws Exception {
+        when(jwtService.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
+        when(expenseService.getSummary(any(), any(), any(), any(), any()))
+                .thenThrow(new AppException(ErrorCode.PARTIAL_DATE_RANGE));
+
+        mockMvc.perform(get("/api/v1/expenses/summary")
+                        .param("from", "2026-03-01")
+                        .header("Authorization", "Bearer " + VALID_TOKEN))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

@@ -4,24 +4,25 @@ import com.fintrack.core.exception.AppException;
 import com.fintrack.core.exception.ErrorCode;
 
 import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
 
 /**
- * An inclusive {@code [from, to]} calendar-date window, used to bound expense list queries.
+ * An inclusive {@code [from, to]} calendar-date window used to bound expense queries. Both bounds
+ * are {@code null} when the caller supplied no dates, meaning "all time" (no date restriction).
  *
- * @param from window start, inclusive
- * @param to   window end, inclusive
+ * @param from window start, inclusive; {@code null} = unbounded
+ * @param to   window end, inclusive; {@code null} = unbounded
  */
 public record DateRange(LocalDate from, LocalDate to) {
 
-    private static final long MAX_DAYS_BETWEEN = 31;
-
-    private static final long DEFAULT_LOOKBACK_DAYS = 30;
-
+    /**
+     * Supply both dates or neither. There is no maximum span.
+     *
+     * @throws AppException {@code PARTIAL_DATE_RANGE} if only one date is given,
+     *                      {@code INVALID_DATE_RANGE} if {@code to} is before {@code from}
+     */
     public static DateRange resolve(LocalDate from, LocalDate to) {
         if (from == null && to == null) {
-            LocalDate today = LocalDate.now();
-            return new DateRange(today.minusDays(DEFAULT_LOOKBACK_DAYS), today);
+            return new DateRange(null, null);
         }
 
         if (from == null || to == null) {
@@ -30,10 +31,6 @@ public record DateRange(LocalDate from, LocalDate to) {
 
         if (to.isBefore(from)) {
             throw new AppException(ErrorCode.INVALID_DATE_RANGE);
-        }
-
-        if (ChronoUnit.DAYS.between(from, to) >= MAX_DAYS_BETWEEN) {
-            throw new AppException(ErrorCode.DATE_RANGE_TOO_LARGE);
         }
 
         return new DateRange(from, to);

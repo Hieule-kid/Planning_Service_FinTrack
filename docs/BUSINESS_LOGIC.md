@@ -108,10 +108,9 @@ values are permitted (see `TimeframeCategory`, `Frequency`, `MilestoneCalculator
 - `spentOn` may never be a future date. This check is enforced in the service layer rather than as
   a Bean Validation annotation because it needs "today" at request-handling time, not a fixed
   validation-time constant (see `ExpenseServiceImpl.rejectFutureDate`).
-- Expense list queries default to the last 31 days (today − 30 days through today, inclusive) when
-  no date range is supplied. A caller must supply both `from` and `to` or neither — supplying only
-  one is rejected. A supplied range spanning 31 or more days between the two dates is rejected (a
-  31-day inclusive window passes; 32 days fails) (see `DateRange.resolve`, `ExpenseController`,
+- Expense list queries return all expenses (all time) when no date range is supplied. A caller must
+  supply both `from` and `to` or neither — supplying only one is rejected, as is `to` before `from`.
+  There is no maximum span (see `DateRange.resolve`, `ExpenseController`,
   `ExpenseServiceImpl.listExpenses`).
 - An expense can optionally link to a savings plan (`planId`). If supplied, the plan must belong to
   the same user, or the request fails with `EXPENSE_PLAN_MISMATCH`. The same error code is used
@@ -195,3 +194,30 @@ values are permitted (see `TimeframeCategory`, `Frequency`, `MilestoneCalculator
   allocation percentages, the model is instructed to apply the standard 50/30/20 budgeting rule
   (50% necessities, 30% wants, 20% savings/investments) and must return the budget breakdown as
   strict JSON (see `GeminiConfig`, `PlanServiceImpl.generateAiPlan`).
+
+## Dashboard Summary (`GET /api/v1/plans/summary`)
+
+- Returns one entry per currency (`planCount`, `completedPlanCount`, `totalTarget`, `totalSaved`,
+  `remaining`); currencies are never combined. It aggregates over ALL of the caller's plans, so it is
+  independent of any list paging. Money fields are strings to avoid floating-point loss in JS clients.
+  The caller is always taken from the JWT (see `PlanController.getSummary`).
+- `totalSaved` follows the per-plan rule in `MilestoneCalculator.computeTotals`: only COMPLETED
+  milestones count, so partial progress on an unfinished milestone is excluded. COMPLETED is evaluated
+  in SQL as `manually_completed OR actual_saved >= base_target_savings`. This is exact even with
+  deficit redistribution on, because redistribution only raises targets of milestones that are not
+  already completed (see `PlanRepository.summarizeByUser`).
+- `remaining` is clamped to 0 per plan before summing, matching each plan card, so an over-saved plan
+  never offsets another plan's shortfall.
+- Consistency: the summary is a single read-only query with no cross-request locking. A summary loaded
+  while a milestone is being saved may reflect either side of that write; the next load is correct.
+
+## Expense Summary (`GET /api/v1/expenses/summary`)
+
+- Returns the applied filter (`from`, `to`, `type`, `categoryId`; each is null when unset) and `totals`: spent (`total`), `fixed` and `variable` plus a
+  `count`, one entry per currency (never combined), over ALL expenses matching the window/`type`/`categoryId` filters — independent of
+  the list endpoint's paging. `fixed + variable == total`. Money fields are strings.
+- It shares the list query's WHERE clause (`ExpenseRepository.SEARCH_FILTER`) and the same
+  `DateRange.resolve` rules (supply both dates or neither; neither means all time; there is no maximum span), so the totals
+  and the list cannot disagree about which expenses match. With a `type` filter applied, the other
+  type's total is 0.
+- The list accepts a `planId` parameter that its query ignores; the summary deliberately has none.

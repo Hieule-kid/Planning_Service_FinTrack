@@ -8,8 +8,10 @@ import com.fintrack.planning.config.SecurityConfig;
 import com.fintrack.planning.dto.request.CreatePlanRequest;
 import com.fintrack.planning.dto.request.ToggleRecalculateRequest;
 import com.fintrack.planning.dto.request.UpdateMilestoneRequest;
+import com.fintrack.planning.dto.response.CurrencySummaryResponse;
 import com.fintrack.planning.dto.response.PlanResponse;
 import com.fintrack.planning.dto.response.PlanSummaryResponse;
+import com.fintrack.planning.model.enums.Currency;
 import com.fintrack.planning.service.JwtService;
 import com.fintrack.planning.service.PlanService;
 import io.jsonwebtoken.JwtException;
@@ -27,12 +29,14 @@ import java.util.List;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -109,6 +113,64 @@ class PlanControllerTest {
         mockMvc.perform(get("/api/v1/plans")
                         .header("Authorization", "Bearer " + VALID_TOKEN))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void getSummary_withoutAuthorizationHeader_returns401() throws Exception {
+        mockMvc.perform(get("/api/v1/plans/summary"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void getSummary_withValidToken_returnsPerCurrencyTotalsAsStrings() throws Exception {
+        when(jwtService.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
+        when(planService.getSummary(USER_ID)).thenReturn(List.of(
+                CurrencySummaryResponse.builder()
+                        .currency(Currency.VND)
+                        .planCount(2)
+                        .completedPlanCount(1)
+                        .totalTarget(new BigDecimal("10000000000.00"))
+                        .totalSaved(new BigDecimal("2500000000.50"))
+                        .remaining(new BigDecimal("7499999999.50"))
+                        .build()));
+
+        mockMvc.perform(get("/api/v1/plans/summary")
+                        .header("Authorization", "Bearer " + VALID_TOKEN))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].currency").value("VND"))
+                .andExpect(jsonPath("$.data[0].planCount").value(2))
+                .andExpect(jsonPath("$.data[0].completedPlanCount").value(1))
+                .andExpect(jsonPath("$.data[0].totalTarget").value("10000000000.00"))
+                .andExpect(jsonPath("$.data[0].totalSaved").value("2500000000.50"))
+                .andExpect(jsonPath("$.data[0].remaining").value("7499999999.50"));
+    }
+
+    @Test
+    void getSummary_isRoutedToSummaryNotToPlanDetail() throws Exception {
+        when(jwtService.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
+        when(planService.getSummary(USER_ID)).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/plans/summary")
+                        .header("Authorization", "Bearer " + VALID_TOKEN))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").isEmpty());
+
+        verify(planService).getSummary(USER_ID);
+        verify(planService, never()).getPlan(any(), any());
+    }
+
+    @Test
+    void getSummary_ignoresUserIdQueryParameter_usesTokenIdentity() throws Exception {
+        when(jwtService.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
+        when(planService.getSummary(USER_ID)).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/plans/summary")
+                        .param("userId", "someone-else")
+                        .header("Authorization", "Bearer " + VALID_TOKEN))
+                .andExpect(status().isOk());
+
+        verify(planService).getSummary(USER_ID);
+        verify(planService, never()).getSummary("someone-else");
     }
 
     @Test

@@ -5,6 +5,7 @@ import com.fintrack.core.exception.ErrorCode;
 import com.fintrack.planning.dto.request.CreatePlanRequest;
 import com.fintrack.planning.dto.request.ToggleRecalculateRequest;
 import com.fintrack.planning.dto.request.UpdateMilestoneRequest;
+import com.fintrack.planning.dto.response.CurrencySummaryResponse;
 import com.fintrack.planning.dto.response.PlanResponse;
 import com.fintrack.planning.dto.response.PlanSummaryResponse;
 import com.fintrack.planning.model.MilestoneEntity;
@@ -13,6 +14,7 @@ import com.fintrack.planning.model.enums.Currency;
 import com.fintrack.planning.model.enums.Frequency;
 import com.fintrack.planning.model.enums.PlanCategory;
 import com.fintrack.planning.model.enums.TimeframeCategory;
+import com.fintrack.planning.repository.CurrencyTotals;
 import com.fintrack.planning.repository.MilestoneRepository;
 import com.fintrack.planning.repository.PlanRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -292,6 +294,54 @@ class PlanServiceImplTest {
 
         PlanSummaryResponse summary = result.get(0);
         assertThat(summary.getTotalSaved()).isEqualByComparingTo("100.00");
+    }
+
+    @Test
+    void getSummary_noPlans_returnsEmptyList() {
+        when(planRepository.summarizeByUser(USER_ID)).thenReturn(List.of());
+
+        assertThat(planService.getSummary(USER_ID)).isEmpty();
+    }
+
+    @Test
+    void getSummary_mapsEachCurrencyRowWithoutCombiningThem() {
+        when(planRepository.summarizeByUser(USER_ID)).thenReturn(List.of(
+                totals("USD", 1, 0, "500.00", "0.00", "500.00"),
+                totals("VND", 3, 2, "30000000.00", "12000000.00", "18000000.00")));
+
+        List<CurrencySummaryResponse> result = planService.getSummary(USER_ID);
+
+        assertThat(result).hasSize(2);
+        assertThat(result.get(0).getCurrency()).isEqualTo(Currency.USD);
+        assertThat(result.get(0).getTotalSaved()).isEqualByComparingTo("0.00");
+        assertThat(result.get(1).getCurrency()).isEqualTo(Currency.VND);
+        assertThat(result.get(1).getPlanCount()).isEqualTo(3);
+        assertThat(result.get(1).getCompletedPlanCount()).isEqualTo(2);
+        assertThat(result.get(1).getTotalTarget()).isEqualByComparingTo("30000000.00");
+        assertThat(result.get(1).getTotalSaved()).isEqualByComparingTo("12000000.00");
+        assertThat(result.get(1).getRemaining()).isEqualByComparingTo("18000000.00");
+    }
+
+    @Test
+    void getSummary_onlyQueriesForTheCallingUser() {
+        when(planRepository.summarizeByUser(USER_ID)).thenReturn(List.of());
+
+        planService.getSummary(USER_ID);
+
+        verify(planRepository).summarizeByUser(USER_ID);
+        verify(planRepository, never()).summarizeByUser(OTHER_ID);
+    }
+
+    private static CurrencyTotals totals(String currency, long planCount, long completed,
+                                         String target, String saved, String remaining) {
+        return new CurrencyTotals() {
+            public String getCurrency() { return currency; }
+            public long getPlanCount() { return planCount; }
+            public long getCompletedPlanCount() { return completed; }
+            public BigDecimal getTotalTarget() { return new BigDecimal(target); }
+            public BigDecimal getTotalSaved() { return new BigDecimal(saved); }
+            public BigDecimal getRemaining() { return new BigDecimal(remaining); }
+        };
     }
 
     @Test

@@ -9,6 +9,8 @@ import com.fintrack.planning.dto.request.CreateExpenseRequest;
 import com.fintrack.planning.dto.request.UpdateExpenseRequest;
 import com.fintrack.planning.dto.response.CreateExpenseMultipleResponse;
 import com.fintrack.planning.dto.response.ExpenseResponse;
+import com.fintrack.planning.dto.response.ExpenseCurrencySummaryResponse;
+import com.fintrack.planning.dto.response.ExpenseSummaryResponse;
 import com.fintrack.planning.model.Expense;
 import com.fintrack.planning.model.ExpenseCategory;
 import com.fintrack.planning.model.PlanEntity;
@@ -27,6 +29,8 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -82,6 +86,40 @@ public class ExpenseServiceImpl implements ExpenseService {
                 .map(this::toResponse);
 
         return PageResponse.of(result);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public ExpenseSummaryResponse getSummary(String userId, LocalDate from, LocalDate to,
+                                                   ExpenseType type, String categoryId) {
+        DateRange range = DateRange.resolve(from, to);
+
+        List<ExpenseCurrencySummaryResponse> totals = expenseRepository
+                .summarizeByCurrency(userId, range.from(), range.to(), type, categoryId).stream()
+                .map(row -> ExpenseCurrencySummaryResponse.builder()
+                        .currency(row.getCurrency())
+                        .count(row.getExpenseCount())
+                        .total(money(row.getTotal()))
+                        .fixed(money(row.getFixed()))
+                        .variable(money(row.getVariable()))
+                        .build())
+                .toList();
+
+        return ExpenseSummaryResponse.builder()
+                .from(range.from())
+                .to(range.to())
+                .type(type)
+                .categoryId(categoryId)
+                .totals(totals)
+                .build();
+    }
+
+    /** SUM over an empty CASE branch yields an unscaled 0; keep every money string at the column's 2 decimals. */
+    private static BigDecimal money(BigDecimal value) {
+        return value.setScale(2, RoundingMode.HALF_UP);
     }
 
     /**

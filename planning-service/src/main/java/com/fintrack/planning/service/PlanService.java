@@ -4,6 +4,7 @@ import com.fintrack.planning.dto.ai.AiPlanResponse;
 import com.fintrack.planning.dto.request.CreatePlanRequest;
 import com.fintrack.planning.dto.request.ToggleRecalculateRequest;
 import com.fintrack.planning.dto.request.UpdateMilestoneRequest;
+import com.fintrack.planning.dto.response.CurrencySummaryResponse;
 import com.fintrack.planning.dto.response.PlanResponse;
 import com.fintrack.planning.dto.response.PlanSummaryResponse;
 
@@ -19,6 +20,12 @@ public interface PlanService {
     PlanResponse createPlan(String userId, CreatePlanRequest request);
 
     List<PlanSummaryResponse> listPlans(String userId);
+
+    /**
+     * Totals across all of the user's plans, one entry per currency (never combined).
+     * Empty when the user has no plans.
+     */
+    List<CurrencySummaryResponse> getSummary(String userId);
 
     PlanResponse getPlan(String userId, String planId);
 

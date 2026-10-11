@@ -6,11 +6,13 @@ import com.fintrack.planning.dto.ai.AiPlanResponse;
 import com.fintrack.planning.dto.request.CreatePlanRequest;
 import com.fintrack.planning.dto.request.ToggleRecalculateRequest;
 import com.fintrack.planning.dto.request.UpdateMilestoneRequest;
+import com.fintrack.planning.dto.response.CurrencySummaryResponse;
 import com.fintrack.planning.dto.response.MilestoneResponse;
 import com.fintrack.planning.dto.response.PlanResponse;
 import com.fintrack.planning.dto.response.PlanSummaryResponse;
 import com.fintrack.planning.model.MilestoneEntity;
 import com.fintrack.planning.model.PlanEntity;
+import com.fintrack.planning.model.enums.Currency;
 import com.fintrack.planning.model.enums.TimeframeCategory;
 import com.fintrack.planning.repository.MilestoneRepository;
 import com.fintrack.planning.repository.PlanRepository;
@@ -90,6 +92,27 @@ public class PlanServiceImpl implements PlanService {
                     MilestoneCalculator.PlanTotals totals = MilestoneCalculator.computeTotals(live, plan.getTargetAmount());
                     return toSummaryResponse(plan, totals);
                 })
+                .toList();
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Reads are not isolated from concurrent milestone updates; a summary loaded while a
+     * milestone is being saved may reflect either side of that write.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public List<CurrencySummaryResponse> getSummary(String userId) {
+        return planRepository.summarizeByUser(userId).stream()
+                .map(row -> CurrencySummaryResponse.builder()
+                        .currency(Currency.valueOf(row.getCurrency()))
+                        .planCount(row.getPlanCount())
+                        .completedPlanCount(row.getCompletedPlanCount())
+                        .totalTarget(row.getTotalTarget())
+                        .totalSaved(row.getTotalSaved())
+                        .remaining(row.getRemaining())
+                        .build())
                 .toList();
     }
 
