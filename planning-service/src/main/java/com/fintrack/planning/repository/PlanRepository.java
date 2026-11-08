@@ -16,18 +16,16 @@ import java.util.Optional;
 @Repository
 public interface PlanRepository extends JpaRepository<PlanEntity, String> {
 
-    List<PlanEntity> findByUserIdOrderByCreatedAtDesc(String userId);
+    List<PlanEntity> findByUserIdAndDeletedFalseOrderByCreatedAtDesc(String userId);
 
-    Optional<PlanEntity> findByIdAndUserId(String id, String userId);
+    Optional<PlanEntity> findByIdAndUserIdAndDeletedFalse(String id, String userId);
 
     /**
      * Per-currency totals across ALL of the user's plans, computed in the database.
      *
-     * <p>A plan's saved amount is the sum of {@code actual_saved} over its COMPLETED milestones,
-     * matching {@code MilestoneCalculator.computeTotals}. A milestone is COMPLETED iff it is
-     * manually completed or {@code actual_saved >= base_target_savings}. Deficit redistribution
-     * only raises targets of milestones that are not yet completed, so completion never depends
-     * on the redistributed target or on the current date and can be evaluated on stored columns.
+     * <p>A plan's saved amount is the sum of {@code actual_saved} over ALL its milestones — partial
+     * savings count — matching {@code MilestoneCalculator.computeTotals}. It depends only on stored
+     * columns, never on the current date or on deficit redistribution.
      *
      * <p>{@code remaining} clamps per plan (like the per-plan card) before summing, so an
      * over-saved plan cannot offset another plan's shortfall.
@@ -50,7 +48,6 @@ public interface PlanRepository extends JpaRepository<PlanEntity, String> {
                 FROM milestones m
                 WHERE m.plan_id = p.id
                   AND m.is_deleted = false
-                  AND (m.manually_completed = true OR m.actual_saved >= m.base_target_savings)
             ) s ON true
             WHERE p.user_id = :userId
               AND p.is_deleted = false

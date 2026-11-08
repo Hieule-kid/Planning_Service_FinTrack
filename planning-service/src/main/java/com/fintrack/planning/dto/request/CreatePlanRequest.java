@@ -47,6 +47,7 @@ public class CreatePlanRequest {
     @Schema(description = "Flat duration in months — the FE sends this field. The service derives " +
             "timeframeCategory and durationInMonths from it if timeframeCategory is not supplied.")
     @Min(value = 3, message = "Duration must be at least 3 months")
+    @Max(value = 240, message = "Duration must not exceed 240 months (20 years)")
     private Integer duration;
 
     @Schema(description = "Overall time horizon — derived from duration when omitted")
@@ -55,7 +56,7 @@ public class CreatePlanRequest {
     @Schema(description = "Duration in months — set by the service from the flat duration field; " +
             "can also be supplied directly for short/mid-term plans.", example = "6")
     @Min(value = 3, message = "Duration in months must be at least 3")
-    @Max(value = 720, message = "Duration in months must not exceed 720 (60 years)")
+    @Max(value = 240, message = "Duration in months must not exceed 240 (20 years)")
     private Integer durationInMonths;
 
     @Schema(description = "Duration in years — legacy field for long-term plans (1–20 years).", example = "5")

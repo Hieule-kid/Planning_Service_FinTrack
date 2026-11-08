@@ -5,6 +5,7 @@ import com.fintrack.planning.model.enums.ExpenseType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -16,8 +17,8 @@ import java.util.Optional;
 /**
  * JPA repository for {@link Expense}.
  *
- * <p>{@code BaseEntity}'s soft-delete field is named {@code deleted}
- * (column {@code is_deleted}); all queries here filter {@code deleted = false}.
+ * <p>Expenses are now hard-deleted. Queries still filter {@code deleted = false} so rows
+ * soft-deleted before that change stay hidden.
  *
  */
 @Repository
@@ -35,9 +36,10 @@ public interface ExpenseRepository extends JpaRepository<Expense, String> {
               AND (CAST(:to AS LocalDate) IS NULL OR e.spentOn <= :to)
               AND (:type IS NULL OR e.expenseType = :type)
               AND (:categoryId IS NULL OR e.categoryId = :categoryId)
+              AND (:planId IS NULL OR e.planId = :planId)
             """;
 
-    Optional<Expense> findByIdAndDeletedFalse(String id);
+    Optional<Expense> findByIdAndUserIdAndDeletedFalse(String id, String userId);
 
     /**
      * Filtered, paginated search over a user's expenses.
@@ -51,6 +53,7 @@ public interface ExpenseRepository extends JpaRepository<Expense, String> {
      * @param to         latest {@code spentOn} (inclusive), or {@code null} for no upper bound
      * @param type       optional fixed/variable filter
      * @param categoryId optional category filter
+     * @param planId     optional linked-plan filter
      * @param pageable   paging + sorting
      * @return the matching page of expenses
      */
@@ -60,6 +63,7 @@ public interface ExpenseRepository extends JpaRepository<Expense, String> {
                          @Param("to") LocalDate to,
                          @Param("type") ExpenseType type,
                          @Param("categoryId") String categoryId,
+                         @Param("planId") String planId,
                          Pageable pageable);
 
     /**
@@ -79,5 +83,11 @@ public interface ExpenseRepository extends JpaRepository<Expense, String> {
                                                     @Param("from") LocalDate from,
                                                     @Param("to") LocalDate to,
                                                     @Param("type") ExpenseType type,
-                                                    @Param("categoryId") String categoryId);
+                                                    @Param("categoryId") String categoryId,
+                                                    @Param("planId") String planId);
+
+    /** Drops the association from every expense linked to a plan that is being deleted. */
+    @Modifying
+    @Query("UPDATE Expense e SET e.planId = null WHERE e.planId = :planId")
+    int unlinkPlan(@Param("planId") String planId);
 }

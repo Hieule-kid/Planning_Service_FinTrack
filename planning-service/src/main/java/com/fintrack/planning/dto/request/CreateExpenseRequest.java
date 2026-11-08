@@ -1,5 +1,6 @@
 package com.fintrack.planning.dto.request;
 
+import com.fintrack.planning.model.enums.Currency;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
@@ -24,9 +25,9 @@ public class CreateExpenseRequest {
     @DecimalMin(value = "0.01", message = "Amount must be at least 0.01")
     private BigDecimal amount;
 
-    @Schema(description = "ISO-4217 currency code", example = "USD")
+    @Schema(description = "Currency code (VND or USD, case-insensitive)", example = "USD")
     @NotNull(message = "Currency is required")
-    private String currency;
+    private Currency currency;
 
     @Schema(description = "ID of the expense category to file this under")
     @NotBlank(message = "Category is required")

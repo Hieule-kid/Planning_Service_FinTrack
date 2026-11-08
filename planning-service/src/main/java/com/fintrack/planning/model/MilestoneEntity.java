@@ -78,6 +78,13 @@ public class MilestoneEntity extends BaseEntity {
     @Column(name = "manually_completed", nullable = false)
     private boolean manuallyCompleted = false;
 
+    /**
+     * {@code actualSaved} as it was right before a manual completion topped it up to the target,
+     * so undoing the completion can restore it. {@code null} when there is nothing to restore.
+     */
+    @Column(name = "actual_saved_before_completion", precision = 19, scale = 2)
+    private BigDecimal actualSavedBeforeCompletion;
+
     @Builder.Default
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)

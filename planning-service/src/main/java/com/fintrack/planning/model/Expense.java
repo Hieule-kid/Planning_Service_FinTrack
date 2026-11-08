@@ -33,7 +33,8 @@ import java.time.LocalDate;
 @Table(
     name = "expenses",
     indexes = {
-        @Index(name = "idx_expenses_user_spent_on", columnList = "user_id, spent_on")
+        @Index(name = "idx_expenses_user_spent_on", columnList = "user_id, spent_on"),
+        @Index(name = "idx_expenses_plan_id", columnList = "plan_id")
     }
 )
 public class Expense extends BaseEntity {
@@ -43,6 +44,14 @@ public class Expense extends BaseEntity {
 
     @Column(name = "category_id", nullable = false, length = 36)
     private String categoryId;
+
+    /**
+     * Optional savings plan this expense is associated with — a same-service soft link (no FK, so
+     * deleting a plan clears it explicitly in {@code PlanServiceImpl.deletePlan}). Always a plan
+     * owned by {@link #userId}.
+     */
+    @Column(name = "plan_id", length = 36)
+    private String planId;
 
     @Column(name = "amount", nullable = false, precision = 19, scale = 2)
     private BigDecimal amount;

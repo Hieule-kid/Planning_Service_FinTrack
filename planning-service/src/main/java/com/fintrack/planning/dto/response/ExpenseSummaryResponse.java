@@ -12,7 +12,7 @@ import java.util.List;
 /**
  * Totals over all expenses matching a filter, independent of list paging, together with the filter
  * that was actually applied. {@code from}/{@code to} are always the resolved window (the default
- * window when the caller sent no dates); {@code type} and {@code categoryId} are null when unfiltered.
+ * window when the caller sent no dates); {@code type}, {@code categoryId} and {@code planId} are null when unfiltered.
  * Currencies are never combined: {@code totals} has one entry per currency.
  */
 @Getter
@@ -25,5 +25,6 @@ public class ExpenseSummaryResponse {
     private LocalDate to;
     private ExpenseType type;
     private String categoryId;
+    private String planId;
     private List<ExpenseCurrencySummaryResponse> totals;
 }

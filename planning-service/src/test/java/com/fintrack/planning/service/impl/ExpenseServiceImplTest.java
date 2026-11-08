@@ -1,5 +1,6 @@
 package com.fintrack.planning.service.impl;
 
+import com.fintrack.planning.model.enums.Currency;
 import com.fintrack.core.exception.AppException;
 import com.fintrack.core.exception.ErrorCode;
 import com.fintrack.planning.dto.request.CreateExpenseMultipleRequest;
@@ -8,6 +9,8 @@ import com.fintrack.planning.dto.response.CreateExpenseMultipleResponse;
 import com.fintrack.planning.dto.response.ExpenseResponse;
 import com.fintrack.planning.model.Expense;
 import com.fintrack.planning.model.ExpenseCategory;
+import com.fintrack.planning.model.PlanEntity;
+import com.fintrack.planning.dto.request.UpdateExpenseRequest;
 import com.fintrack.planning.model.enums.ExpenseType;
 import com.fintrack.planning.repository.ExpenseCategoryRepository;
 import com.fintrack.planning.dto.response.ExpenseCurrencySummaryResponse;
@@ -20,6 +23,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -55,6 +59,7 @@ class ExpenseServiceImplTest {
     @Mock private ExpenseRepository expenseRepository;
     @Mock private ExpenseCategoryRepository expenseCategoryRepository;
     @Mock private PlanRepository planRepository;
+    @Spy  private java.time.Clock clock = java.time.Clock.system(java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
 
     @InjectMocks private ExpenseServiceImpl expenseService;
 
@@ -105,22 +110,22 @@ class ExpenseServiceImplTest {
     void listExpenses_longRange_isPassedThroughWithoutACap() {
         LocalDate from = LocalDate.of(2025, 1, 1);
         LocalDate to = LocalDate.of(2026, 12, 31);
-        when(expenseRepository.search(eq(USER_ID), eq(from), eq(to), isNull(), isNull(), any(Pageable.class)))
+        when(expenseRepository.search(eq(USER_ID), eq(from), eq(to), isNull(), isNull(), isNull(), any(Pageable.class)))
                 .thenReturn(Page.empty());
 
         expenseService.listExpenses(USER_ID, from, to, null, null, null, 0, 20);
 
-        verify(expenseRepository).search(eq(USER_ID), eq(from), eq(to), isNull(), isNull(), any(Pageable.class));
+        verify(expenseRepository).search(eq(USER_ID), eq(from), eq(to), isNull(), isNull(), isNull(), any(Pageable.class));
     }
 
     @Test
     void listExpenses_noDates_isUnbounded() {
-        when(expenseRepository.search(eq(USER_ID), isNull(), isNull(), isNull(), isNull(), any(Pageable.class)))
+        when(expenseRepository.search(eq(USER_ID), isNull(), isNull(), isNull(), isNull(), isNull(), any(Pageable.class)))
                 .thenReturn(Page.empty());
 
         expenseService.listExpenses(USER_ID, null, null, null, null, null, 0, 20);
 
-        verify(expenseRepository).search(eq(USER_ID), isNull(), isNull(), isNull(), isNull(), any(Pageable.class));
+        verify(expenseRepository).search(eq(USER_ID), isNull(), isNull(), isNull(), isNull(), isNull(), any(Pageable.class));
     }
 
     @Test
@@ -131,18 +136,18 @@ class ExpenseServiceImplTest {
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ErrorCode.PARTIAL_DATE_RANGE);
 
-        verify(expenseRepository, never()).search(any(), any(), any(), any(), any(), any());
+        verify(expenseRepository, never()).search(any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
     void getSummary_mapsRowsPerCurrency() {
         LocalDate from = LocalDate.of(2026, 3, 1);
         LocalDate to = from.plusDays(30);
-        when(expenseRepository.summarizeByCurrency(USER_ID, from, to, null, null)).thenReturn(List.of(
+        when(expenseRepository.summarizeByCurrency(USER_ID, from, to, null, null, null)).thenReturn(List.of(
                 totals("USD", 2, "50.00", "0", "50.00"),
                 totals("VND", 3, "5400000", "5000000", "400000")));
 
-        ExpenseSummaryResponse result = expenseService.getSummary(USER_ID, from, to, null, null);
+        ExpenseSummaryResponse result = expenseService.getSummary(USER_ID, from, to, null, null, null);
 
         assertThat(result.getTotals()).extracting(ExpenseCurrencySummaryResponse::getCurrency)
                 .containsExactly("USD", "VND");
@@ -159,10 +164,10 @@ class ExpenseServiceImplTest {
     void getSummary_echoesTheAppliedFilter() {
         LocalDate from = LocalDate.of(2026, 9, 21);
         LocalDate to = LocalDate.of(2026, 10, 11);
-        when(expenseRepository.summarizeByCurrency(USER_ID, from, to, ExpenseType.FIXED, "cat-1"))
+        when(expenseRepository.summarizeByCurrency(USER_ID, from, to, ExpenseType.FIXED, "cat-1", null))
                 .thenReturn(List.of());
 
-        ExpenseSummaryResponse result = expenseService.getSummary(USER_ID, from, to, ExpenseType.FIXED, "cat-1");
+        ExpenseSummaryResponse result = expenseService.getSummary(USER_ID, from, to, ExpenseType.FIXED, "cat-1", null);
 
         assertThat(result.getFrom()).isEqualTo(from);
         assertThat(result.getTo()).isEqualTo(to);
@@ -175,9 +180,9 @@ class ExpenseServiceImplTest {
     void getSummary_longRange_isAllowed() {
         LocalDate from = LocalDate.of(2025, 1, 1);
         LocalDate to = LocalDate.of(2026, 12, 31);
-        when(expenseRepository.summarizeByCurrency(USER_ID, from, to, null, null)).thenReturn(List.of());
+        when(expenseRepository.summarizeByCurrency(USER_ID, from, to, null, null, null)).thenReturn(List.of());
 
-        ExpenseSummaryResponse result = expenseService.getSummary(USER_ID, from, to, null, null);
+        ExpenseSummaryResponse result = expenseService.getSummary(USER_ID, from, to, null, null, null);
 
         assertThat(result.getFrom()).isEqualTo(from);
         assertThat(result.getTo()).isEqualTo(to);
@@ -185,22 +190,22 @@ class ExpenseServiceImplTest {
 
     @Test
     void getSummary_onlyFromSupplied_isRejectedBeforeQuery() {
-        assertThatThrownBy(() -> expenseService.getSummary(USER_ID, LocalDate.of(2026, 3, 1), null, null, null))
+        assertThatThrownBy(() -> expenseService.getSummary(USER_ID, LocalDate.of(2026, 3, 1), null, null, null, null))
                 .isInstanceOf(AppException.class)
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ErrorCode.PARTIAL_DATE_RANGE);
 
-        verify(expenseRepository, never()).summarizeByCurrency(any(), any(), any(), any(), any());
+        verify(expenseRepository, never()).summarizeByCurrency(any(), any(), any(), any(), any(), any());
     }
 
     @Test
     void getSummary_noDates_isAllTimeAndEchoesNullBounds() {
-        when(expenseRepository.summarizeByCurrency(USER_ID, null, null, ExpenseType.FIXED, "cat-1"))
+        when(expenseRepository.summarizeByCurrency(USER_ID, null, null, ExpenseType.FIXED, "cat-1", null))
                 .thenReturn(List.of());
 
-        ExpenseSummaryResponse result = expenseService.getSummary(USER_ID, null, null, ExpenseType.FIXED, "cat-1");
+        ExpenseSummaryResponse result = expenseService.getSummary(USER_ID, null, null, ExpenseType.FIXED, "cat-1", null);
 
-        verify(expenseRepository).summarizeByCurrency(USER_ID, null, null, ExpenseType.FIXED, "cat-1");
+        verify(expenseRepository).summarizeByCurrency(USER_ID, null, null, ExpenseType.FIXED, "cat-1", null);
         assertThat(result.getFrom()).isNull();
         assertThat(result.getTo()).isNull();
     }
@@ -316,10 +321,89 @@ class ExpenseServiceImplTest {
         verify(planRepository, never()).findAllById(any());
     }
 
+    // ── Plan link (planId) ──────────────────────────────────────────────────
+
+    @Test
+    void createExpense_linksPlanOwnedByCaller() {
+        CreateExpenseRequest request = baseRequest();
+        request.setPlanId("plan-1");
+        when(expenseCategoryRepository.findById(CATEGORY_ID)).thenReturn(Optional.of(category(USER_ID, ExpenseType.FIXED)));
+        when(planRepository.findByIdAndUserIdAndDeletedFalse("plan-1", USER_ID)).thenReturn(Optional.of(plan("plan-1", USER_ID)));
+        when(expenseRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        ExpenseResponse response = expenseService.createExpense(USER_ID, request);
+
+        assertThat(response.getPlanId()).isEqualTo("plan-1");
+    }
+
+    @Test
+    void createExpense_planNotOwned_isRejectedWithoutSaving() {
+        CreateExpenseRequest request = baseRequest();
+        request.setPlanId("plan-of-someone-else");
+        when(expenseCategoryRepository.findById(CATEGORY_ID)).thenReturn(Optional.of(category(USER_ID, ExpenseType.FIXED)));
+
+        assertThatThrownBy(() -> expenseService.createExpense(USER_ID, request))
+                .isInstanceOf(AppException.class)
+                .extracting(ex -> ((AppException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.EXPENSE_PLAN_MISMATCH);
+        verify(expenseRepository, never()).save(any());
+    }
+
+    @Test
+    void updateExpense_emptyPlanIdUnlinksAndNullLeavesUnchanged() {
+        Expense linked = Expense.builder().userId(USER_ID).categoryId(CATEGORY_ID).planId("plan-1")
+                .amount(new BigDecimal("10.00")).currency("USD").expenseType(ExpenseType.FIXED)
+                .spentOn(LocalDate.now().minusDays(1)).build();
+        when(expenseRepository.findByIdAndUserIdAndDeletedFalse("exp-1", USER_ID)).thenReturn(Optional.of(linked));
+
+        UpdateExpenseRequest untouched = new UpdateExpenseRequest();
+        untouched.setNote("edited");
+        expenseService.updateExpense(USER_ID, "exp-1", untouched);
+        assertThat(linked.getPlanId()).isEqualTo("plan-1");
+
+        UpdateExpenseRequest unlink = new UpdateExpenseRequest();
+        unlink.setPlanId("");
+        expenseService.updateExpense(USER_ID, "exp-1", unlink);
+        assertThat(linked.getPlanId()).isNull();
+    }
+
+    @Test
+    void createExpenseMultiple_planOfAnotherUser_isRejectedWithRowNumber() {
+        ExpenseCategory owned = categoryWithId("cat-a", USER_ID, ExpenseType.VARIABLE);
+        CreateExpenseRequest ok = rowRequest("cat-a", LocalDate.now().minusDays(1));
+        CreateExpenseRequest bad = rowRequest("cat-a", LocalDate.now().minusDays(1));
+        bad.setPlanId("plan-x");
+        when(expenseCategoryRepository.findAllById(any())).thenReturn(List.of(owned));
+        when(planRepository.findAllById(any())).thenReturn(List.of(plan("plan-x", OTHER_ID)));
+
+        assertThatThrownBy(() -> expenseService.createExpenseMultiple(USER_ID, multipleRequest(ok, bad)))
+                .isInstanceOf(AppException.class)
+                .hasMessageContaining("Row 2: Linked plan not found with id: plan-x");
+        verify(expenseRepository, never()).saveAll(anyList());
+    }
+
+    @Test
+    void listExpenses_passesPlanFilterToQuery() {
+        when(expenseRepository.search(eq(USER_ID), isNull(), isNull(), isNull(), isNull(), eq("plan-1"), any(Pageable.class)))
+                .thenReturn(Page.empty());
+
+        expenseService.listExpenses(USER_ID, null, null, "plan-1", null, null, 0, 500);
+
+        org.mockito.ArgumentCaptor<Pageable> paging = org.mockito.ArgumentCaptor.forClass(Pageable.class);
+        verify(expenseRepository).search(eq(USER_ID), isNull(), isNull(), isNull(), isNull(), eq("plan-1"), paging.capture());
+        assertThat(paging.getValue().getPageSize()).isEqualTo(ExpenseServiceImpl.MAX_PAGE_SIZE);
+    }
+
+    private static PlanEntity plan(String id, String ownerId) {
+        PlanEntity plan = PlanEntity.builder().userId(ownerId).build();
+        plan.setId(id);
+        return plan;
+    }
+
     private CreateExpenseRequest rowRequest(String categoryId, LocalDate spentOn) {
         CreateExpenseRequest request = new CreateExpenseRequest();
         request.setAmount(new BigDecimal("10.00"));
-        request.setCurrency("USD");
+        request.setCurrency(Currency.USD);
         request.setCategoryId(categoryId);
         request.setSpentOn(spentOn);
         return request;
@@ -338,7 +422,7 @@ class ExpenseServiceImplTest {
     private CreateExpenseRequest baseRequest() {
         CreateExpenseRequest request = new CreateExpenseRequest();
         request.setAmount(new BigDecimal("10.00"));
-        request.setCurrency("USD");
+        request.setCurrency(Currency.USD);
         request.setCategoryId(CATEGORY_ID);
         request.setSpentOn(LocalDate.now().minusDays(1));
         return request;

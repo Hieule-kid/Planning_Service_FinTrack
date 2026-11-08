@@ -1,5 +1,6 @@
 package com.fintrack.planning.controller;
 
+import com.fintrack.planning.model.enums.Currency;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.core.exception.AppException;
 import com.fintrack.core.exception.ErrorCode;
@@ -29,6 +30,7 @@ import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -76,7 +78,7 @@ class ExpenseControllerTest {
     void getSummary_withValidToken_returnsPerCurrencyTotalsAsStrings() throws Exception {
         when(jwtService.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
         when(expenseService.getSummary(eq(USER_ID), eq(LocalDate.of(2026, 3, 1)), eq(LocalDate.of(2026, 3, 31)),
-                eq(ExpenseType.FIXED), eq(CATEGORY_ID)))
+                eq(ExpenseType.FIXED), eq(CATEGORY_ID), isNull()))
                 .thenReturn(ExpenseSummaryResponse.builder()
                         .from(LocalDate.of(2026, 3, 1)).to(LocalDate.of(2026, 3, 31))
                         .type(ExpenseType.FIXED).categoryId(CATEGORY_ID)
@@ -107,7 +109,7 @@ class ExpenseControllerTest {
     @Test
     void getSummary_invalidRange_returns400() throws Exception {
         when(jwtService.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
-        when(expenseService.getSummary(any(), any(), any(), any(), any()))
+        when(expenseService.getSummary(any(), any(), any(), any(), any(), any()))
                 .thenThrow(new AppException(ErrorCode.PARTIAL_DATE_RANGE));
 
         mockMvc.perform(get("/api/v1/expenses/summary")
@@ -222,7 +224,7 @@ class ExpenseControllerTest {
     private CreateExpenseRequest validRow() {
         CreateExpenseRequest request = new CreateExpenseRequest();
         request.setAmount(new BigDecimal("10.00"));
-        request.setCurrency("USD");
+        request.setCurrency(Currency.USD);
         request.setCategoryId(CATEGORY_ID);
         request.setSpentOn(LocalDate.now().minusDays(1));
         return request;

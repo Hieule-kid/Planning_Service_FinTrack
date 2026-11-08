@@ -43,7 +43,7 @@ class ExpenseRepositorySummaryTest {
 
     @Test
     void noExpenses_returnsEmpty() {
-        assertThat(repository.summarizeByCurrency(USER, FROM, TO, null, null)).isEmpty();
+        assertThat(repository.summarizeByCurrency(USER, FROM, TO, null, null, null)).isEmpty();
     }
 
     @Test
@@ -53,7 +53,7 @@ class ExpenseRepositorySummaryTest {
         save(USER, "VND", "150000", ExpenseType.VARIABLE, FROM.plusDays(2), "food");
         save(USER, "USD", "40.50", ExpenseType.VARIABLE, FROM.plusDays(3), "coffee");
 
-        List<ExpenseCurrencyTotals> rows = repository.summarizeByCurrency(USER, FROM, TO, null, null);
+        List<ExpenseCurrencyTotals> rows = repository.summarizeByCurrency(USER, FROM, TO, null, null, null);
 
         assertThat(rows).extracting(ExpenseCurrencyTotals::getCurrency).containsExactly("USD", "VND");
         ExpenseCurrencyTotals usd = rows.get(0);
@@ -73,7 +73,7 @@ class ExpenseRepositorySummaryTest {
             save(USER, "VND", "1000", i % 3 == 0 ? ExpenseType.FIXED : ExpenseType.VARIABLE, FROM.plusDays(i % 30), "n" + i);
         }
 
-        ExpenseCurrencyTotals vnd = repository.summarizeByCurrency(USER, FROM, TO, null, null).get(0);
+        ExpenseCurrencyTotals vnd = repository.summarizeByCurrency(USER, FROM, TO, null, null, null).get(0);
 
         assertThat(vnd.getExpenseCount()).isEqualTo(45);
         assertThat(vnd.getTotal()).isEqualByComparingTo("45000");
@@ -88,7 +88,7 @@ class ExpenseRepositorySummaryTest {
         save(USER, "VND", "999", ExpenseType.VARIABLE, FROM.minusDays(1), "before");
         save(USER, "VND", "999", ExpenseType.VARIABLE, TO.plusDays(1), "after");
 
-        assertThat(repository.summarizeByCurrency(USER, FROM, TO, null, null).get(0).getTotal())
+        assertThat(repository.summarizeByCurrency(USER, FROM, TO, null, null, null).get(0).getTotal())
                 .isEqualByComparingTo("200");
     }
 
@@ -98,12 +98,12 @@ class ExpenseRepositorySummaryTest {
         save(USER, "VND", "200", ExpenseType.VARIABLE, LocalDate.of(2026, 3, 15), "recent");
         save(USER, "USD", "5", ExpenseType.FIXED, LocalDate.of(2024, 6, 1), "mid");
 
-        List<ExpenseCurrencyTotals> rows = repository.summarizeByCurrency(USER, null, null, null, null);
+        List<ExpenseCurrencyTotals> rows = repository.summarizeByCurrency(USER, null, null, null, null, null);
 
         assertThat(rows).extracting(ExpenseCurrencyTotals::getCurrency).containsExactly("USD", "VND");
         assertThat(rows.get(1).getTotal()).isEqualByComparingTo("300");
         assertThat(rows.stream().mapToLong(ExpenseCurrencyTotals::getExpenseCount).sum())
-                .isEqualTo(repository.search(USER, null, null, null, null, PageRequest.of(0, 1)).getTotalElements());
+                .isEqualTo(repository.search(USER, null, null, null, null, null, PageRequest.of(0, 1)).getTotalElements());
     }
 
     @Test
@@ -111,7 +111,7 @@ class ExpenseRepositorySummaryTest {
         save(USER, "VND", "100", ExpenseType.VARIABLE, LocalDate.of(2023, 2, 1), "a");
         save(USER, "VND", "100", ExpenseType.VARIABLE, LocalDate.of(2026, 2, 1), "b");
 
-        assertThat(repository.summarizeByCurrency(USER, LocalDate.of(2023, 1, 1), LocalDate.of(2026, 12, 31), null, null)
+        assertThat(repository.summarizeByCurrency(USER, LocalDate.of(2023, 1, 1), LocalDate.of(2026, 12, 31), null, null, null)
                 .get(0).getTotal()).isEqualByComparingTo("200");
     }
 
@@ -123,10 +123,10 @@ class ExpenseRepositorySummaryTest {
         repository.saveAndFlush(deleted);
         save(OTHER, "VND", "7777", ExpenseType.FIXED, FROM, "theirs");
 
-        ExpenseCurrencyTotals vnd = repository.summarizeByCurrency(USER, FROM, TO, null, null).get(0);
+        ExpenseCurrencyTotals vnd = repository.summarizeByCurrency(USER, FROM, TO, null, null, null).get(0);
 
         assertThat(vnd.getTotal()).isEqualByComparingTo("100");
-        assertThat(repository.summarizeByCurrency("nobody", FROM, TO, null, null)).isEmpty();
+        assertThat(repository.summarizeByCurrency("nobody", FROM, TO, null, null, null)).isEmpty();
     }
 
     @Test
@@ -139,19 +139,19 @@ class ExpenseRepositorySummaryTest {
         repository.saveAndFlush(other);
 
         // type filter: only FIXED -> spent == fixed, variable == 0
-        ExpenseCurrencyTotals fixedOnly = repository.summarizeByCurrency(USER, FROM, TO, ExpenseType.FIXED, null).get(0);
+        ExpenseCurrencyTotals fixedOnly = repository.summarizeByCurrency(USER, FROM, TO, ExpenseType.FIXED, null, null).get(0);
         assertThat(fixedOnly.getTotal()).isEqualByComparingTo("700");
         assertThat(fixedOnly.getVariable()).isEqualByComparingTo("0");
 
         // category filter
-        ExpenseCurrencyTotals cat1 = repository.summarizeByCurrency(USER, FROM, TO, null, food.getCategoryId()).get(0);
+        ExpenseCurrencyTotals cat1 = repository.summarizeByCurrency(USER, FROM, TO, null, food.getCategoryId(), null).get(0);
         assertThat(cat1.getTotal()).isEqualByComparingTo("1000");
 
         // for every filter combination the summary count equals the list's totalElements
         for (ExpenseType type : new ExpenseType[] {null, ExpenseType.FIXED, ExpenseType.VARIABLE}) {
             for (String cat : new String[] {null, "cat-1", "cat-2"}) {
-                long listed = repository.search(USER, FROM, TO, type, cat, PageRequest.of(0, 1)).getTotalElements();
-                long summarized = repository.summarizeByCurrency(USER, FROM, TO, type, cat).stream()
+                long listed = repository.search(USER, FROM, TO, type, cat, null, PageRequest.of(0, 1)).getTotalElements();
+                long summarized = repository.summarizeByCurrency(USER, FROM, TO, type, cat, null).stream()
                         .mapToLong(ExpenseCurrencyTotals::getExpenseCount).sum();
                 assertThat(summarized).as("type=%s category=%s", type, cat).isEqualTo(listed);
             }
