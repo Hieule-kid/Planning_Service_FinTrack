@@ -49,7 +49,7 @@ class CreateExpenseRequestValidationTest {
     private CreateExpenseRequest validRequest() {
         CreateExpenseRequest request = new CreateExpenseRequest();
         request.setAmount(new BigDecimal("0.01"));
-        request.setCurrency("USD");
+        request.setCurrency(com.fintrack.planning.model.enums.Currency.USD);
         request.setCategoryId("cat-1");
         request.setSpentOn(LocalDate.now());
         return request;

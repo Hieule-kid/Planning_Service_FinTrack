@@ -52,9 +52,9 @@ class PlanRepositorySummaryTest {
     }
 
     @Test
-    void singleCurrency_countsOnlyCompletedMilestonesAsSaved() {
+    void singleCurrency_countsEveryAmountSavedIncludingPartial() {
         PlanEntity plan = plan(USER, Currency.VND, "1000.00", false);
-        // completed by amount, partially saved (not counted), completed manually below its base target
+        // completed by amount, partially saved (counted), completed manually below its base target
         milestone(plan, 0, "300.00", "300.00", false);
         milestone(plan, 1, "300.00", "100.00", false);
         milestone(plan, 2, "400.00", "150.00", true);
@@ -67,8 +67,8 @@ class PlanRepositorySummaryTest {
         assertThat(vnd.getPlanCount()).isEqualTo(1);
         assertThat(vnd.getCompletedPlanCount()).isZero();
         assertThat(vnd.getTotalTarget()).isEqualByComparingTo("1000.00");
-        assertThat(vnd.getTotalSaved()).isEqualByComparingTo("450.00");
-        assertThat(vnd.getRemaining()).isEqualByComparingTo("550.00");
+        assertThat(vnd.getTotalSaved()).isEqualByComparingTo("550.00");
+        assertThat(vnd.getRemaining()).isEqualByComparingTo("450.00");
     }
 
     @Test
@@ -95,7 +95,7 @@ class PlanRepositorySummaryTest {
         CurrencyTotals usdRow = rows.get(0);
         CurrencyTotals vndRow = rows.get(1);
         assertThat(usdRow.getTotalTarget()).isEqualByComparingTo("500.00");
-        assertThat(usdRow.getTotalSaved()).isEqualByComparingTo("0.00");
+        assertThat(usdRow.getTotalSaved()).isEqualByComparingTo("100.00");
         assertThat(vndRow.getTotalTarget()).isEqualByComparingTo("10000000000.00");
         assertThat(vndRow.getTotalSaved()).isEqualByComparingTo("10000000000.00");
         assertThat(vndRow.getCompletedPlanCount()).isEqualTo(1);

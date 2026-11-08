@@ -50,6 +50,10 @@ values are permitted (see `TimeframeCategory`, `Frequency`, `MilestoneCalculator
 | `MID_TERM` | 12–60 months (1–5 years) | `DAILY` or `MONTHLY` | `durationInMonths` |
 | `LONG_TERM` | 61–240 months (5–20 years) | `MONTHLY` or `ANNUALLY` | `durationInMonths` or `durationInYears` |
 
+- The duration range is enforced whenever `durationInMonths` is present, even if the client sends
+  `timeframeCategory` explicitly (e.g. `SHORT_TERM` + 200 months is rejected). `duration` and
+  `durationInMonths` are capped at 240 (see `MilestoneCalculator.requireMonthsInRange`).
+
 - `durationInMonths` is the field used for `SHORT_TERM`/`MID_TERM` plans. `durationInYears` is a
   legacy field retained for `LONG_TERM` plans created before the flat-duration (`durationInMonths`)
   migration (see `PlanEntity`).
@@ -70,32 +74,40 @@ values are permitted (see `TimeframeCategory`, `Frequency`, `MilestoneCalculator
   was explicitly marked complete) beats **OVERDUE** (deadline has passed and it isn't complete)
   beats **PENDING** (otherwise) (see `MilestoneStatus`, `MilestoneCalculator.deriveStatus`).
 - Marking a milestone complete (`POST /milestones/{id}/complete`) sets `actualSaved` to the
-  milestone's current effective target savings, unless it is already higher — and sets the
-  manual-completion flag regardless of whether the amount saved actually reached the target
+  milestone's current effective target savings, unless it is already higher, and sets the
+  manual-completion flag. When it tops the amount up, the previous amount is remembered in
+  `actualSavedBeforeCompletion`. Completing an already-completed milestone is a no-op
   (see `MilestoneEntity.manuallyCompleted`, `PlanServiceImpl.completeMilestone`).
-- Undoing completion (`POST /milestones/{id}/undo`) only clears the manual-completion flag; the
-  displayed status then reverts to whatever the live computation derives (`PENDING` or `OVERDUE`)
-  based on the amount saved and the current date.
+- Undoing completion (`POST /milestones/{id}/undo`) clears the flag and restores the remembered
+  amount, so the status really reverts to `PENDING`/`OVERDUE`. An explicit `PATCH` of `actualSaved`
+  discards the remembered amount: the user's own number wins over an undo. Milestones completed
+  before this column existed have nothing to restore, so their undo only clears the flag.
+- "Today" is evaluated in `Asia/Ho_Chi_Minh` via the shared `Clock` bean, not the server zone
+  (Render runs in UTC) — this drives OVERDUE, future-dated expense checks and the default plan
+  start date (see `ClockConfig`).
 - Plan-level totals are always derived, never stored: `totalSaved` = sum of `actualSaved` across
-  milestones whose live status is `COMPLETED`; `remaining` = `max(0, targetAmount - totalSaved)`;
+  ALL milestones, whatever their status — partial savings count, because progress must reflect
+  real money; `remaining` = `max(0, targetAmount - totalSaved)`;
   `progressPercent` = `min(100, totalSaved / targetAmount * 100)`, rounded to 2 decimal places
   (see `MilestoneCalculator.computeTotals`, `PlanResponse`, `PlanSummaryResponse`).
 
 ## Deficit Redistribution
 
-- Every plan has a `recalculateOnMissedDeadline` toggle, off by default. When enabled, deficits
-  from overdue milestones are redistributed evenly across future, not-yet-completed milestones
-  every time the plan is read. When disabled, the originally generated schedule is left untouched
+- Every plan has a `recalculateOnMissedDeadline` toggle, off by default. When enabled, the open
+  milestones' targets are recomputed every time the plan is read so the plan still lands exactly
+  on its target amount. When disabled, the originally generated schedule is left untouched
   (see `PlanEntity.recalculateOnMissedDeadline`, `MilestoneCalculator.computeLiveMilestones`).
-- Redistribution algorithm: every milestone whose deadline has passed without being completed
-  contributes its deficit (`baseTargetSavings - actualSaved`, only when positive) into a shared
-  pool. That pool is split evenly, floor-divided to 2 decimal places, across every milestone that
-  is currently pending (deadline not yet passed, not completed) — with any leftover cent added to
-  the last receiving milestone so the totals reconcile exactly. If there are no pending milestones
-  to receive the pool, it is left unredistributed and nothing changes
-  (see `MilestoneCalculator.computeLiveMilestones`).
-- A milestone that is itself `COMPLETED` (whether by amount saved or the manual-completion flag)
-  never contributes to the deficit pool, even if its deadline has already passed.
+- Redistribution algorithm: a milestone is *open* when, judged against its base target, it is
+  `PENDING` (deadline not passed, not completed); every other milestone is *closed*. The open
+  milestones owe `max(0, Σ baseTargetSavings − Σ actualSaved of closed milestones)` — base targets
+  always sum to the plan's target amount — split evenly, floor-divided to 2 decimal places, with
+  the leftover cent on the last open milestone. If no milestone is open, nothing changes.
+- Invariant: the amount the user is asked to save in total never exceeds the target. Deficits on
+  overdue milestones raise the open targets; over-saving on a closed milestone lowers them (down
+  to 0, at which point the open milestones count as completed). Completing an open milestone at
+  its raised target moves it to *closed* without changing what the others owe.
+- A manually completed milestone saved below its base target still leaves that shortfall to the
+  open milestones: the flag closes the period, it does not waive the money.
 
 ## Expense Tracking
 
@@ -112,16 +124,16 @@ values are permitted (see `TimeframeCategory`, `Frequency`, `MilestoneCalculator
   supply both `from` and `to` or neither — supplying only one is rejected, as is `to` before `from`.
   There is no maximum span (see `DateRange.resolve`, `ExpenseController`,
   `ExpenseServiceImpl.listExpenses`).
-- An expense can optionally link to a savings plan (`planId`). If supplied, the plan must belong to
-  the same user, or the request fails with `EXPENSE_PLAN_MISMATCH`. The same error code is used
-  whether the plan doesn't exist at all or simply belongs to someone else, so a caller cannot use
-  the error response to probe for plan IDs they don't own
-  (see `ExpenseServiceImpl.verifyPlanOwnership`).
-- Expenses are **soft**-deleted (the row is retained as financial history and excluded from reads),
-  following the codebase-wide `BaseEntity` convention. Plans are a deliberate exception: deleting a
-  plan physically removes the plan and its milestones from the database, since milestones are
-  owned exclusively by their plan (see `ExpenseServiceImpl`, `PlanServiceImpl.deletePlan`,
-  `ExpenseController`).
+- Not implemented yet: requests accept a `planId`, but `Expense` has no column for it, so the value
+  is silently dropped and the list endpoint's `planId` filter is ignored.
+  `ExpenseServiceImpl.verifyPlanOwnership` exists for when the link is added and is currently unused.
+- `currency` is restricted to the `Currency` enum (`VND`/`USD`, case-insensitive on input) and
+  stored uppercase, so the per-currency summary never splits `usd` from `USD`.
+- `GET /expenses` pages are clamped to `size` 1–100 (`ExpenseServiceImpl.MAX_PAGE_SIZE`).
+- **Delete is a hard delete** for both expenses and plans: the row is physically removed (a plan
+  together with its milestones). Rows soft-deleted before this change still exist with
+  `is_deleted = true`, so every read keeps filtering `deleted = false`
+  (see `ExpenseServiceImpl.deleteExpense`, `PlanServiceImpl.deletePlan`).
 
 ## Expense Categories
 
@@ -149,11 +161,10 @@ values are permitted (see `TimeframeCategory`, `Frequency`, `MilestoneCalculator
   parent plan live in the same service/database (see `MilestoneEntity.plan`).
 - `MilestoneRepository.findByIdAndPlanId` scopes milestone lookups to a specific plan, so a
   milestone ID cannot be used to reach into a plan it doesn't belong to.
-- Ownership is enforced at the service layer: a plan, milestone, expense, or category that exists
-  but isn't owned by the requesting user returns the same "not found"/"forbidden" style response
-  used for a genuinely missing resource, so a caller cannot use the response to distinguish
-  "doesn't exist" from "exists but isn't yours" (see `PlanServiceImpl.getOwnedPlanOrThrow`,
-  `ExpenseServiceImpl.getOwnedExpenseOrThrow`, `ExpenseServiceImpl.verifyPlanOwnership`).
+- Ownership is enforced in the lookup query itself (`findByIdAndUserIdAndDeletedFalse`): a plan or
+  expense that is missing, legacy soft-deleted, or owned by someone else returns the exact same
+  `404`, so a caller cannot distinguish "doesn't exist" from "exists but isn't yours"
+  (see `PlanServiceImpl.getOwnedPlanOrThrow`, `ExpenseServiceImpl.getOwnedExpenseOrThrow`).
 
 ## Cross-Service Interactions
 
@@ -193,7 +204,8 @@ values are permitted (see `TimeframeCategory`, `Frequency`, `MilestoneCalculator
   prompt to Google Gemini via Spring AI's `ChatClient`. When the user doesn't specify explicit
   allocation percentages, the model is instructed to apply the standard 50/30/20 budgeting rule
   (50% necessities, 30% wants, 20% savings/investments) and must return the budget breakdown as
-  strict JSON (see `GeminiConfig`, `PlanServiceImpl.generateAiPlan`).
+  strict JSON (see `GeminiConfig`, `PlanServiceImpl.generateAiPlan`). Prompts are capped at 2000
+  characters, and the response's money and percentage fields are `BigDecimal`.
 
 ## Dashboard Summary (`GET /api/v1/plans/summary`)
 
@@ -201,11 +213,10 @@ values are permitted (see `TimeframeCategory`, `Frequency`, `MilestoneCalculator
   `remaining`); currencies are never combined. It aggregates over ALL of the caller's plans, so it is
   independent of any list paging. Money fields are strings to avoid floating-point loss in JS clients.
   The caller is always taken from the JWT (see `PlanController.getSummary`).
-- `totalSaved` follows the per-plan rule in `MilestoneCalculator.computeTotals`: only COMPLETED
-  milestones count, so partial progress on an unfinished milestone is excluded. COMPLETED is evaluated
-  in SQL as `manually_completed OR actual_saved >= base_target_savings`. This is exact even with
-  deficit redistribution on, because redistribution only raises targets of milestones that are not
-  already completed (see `PlanRepository.summarizeByUser`).
+- `totalSaved` follows the per-plan rule in `MilestoneCalculator.computeTotals`: the sum of
+  `actual_saved` over all of the plan's milestones, partial savings included. It only reads stored
+  columns, so it is exact with or without deficit redistribution (see `PlanRepository.summarizeByUser`).
+  `completedPlanCount` counts plans whose saved total has reached their target.
 - `remaining` is clamped to 0 per plan before summing, matching each plan card, so an over-saved plan
   never offsets another plan's shortfall.
 - Consistency: the summary is a single read-only query with no cross-request locking. A summary loaded

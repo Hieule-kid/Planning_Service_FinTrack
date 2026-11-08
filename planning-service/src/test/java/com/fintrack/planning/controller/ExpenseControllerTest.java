@@ -1,5 +1,6 @@
 package com.fintrack.planning.controller;
 
+import com.fintrack.planning.model.enums.Currency;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.core.exception.AppException;
 import com.fintrack.core.exception.ErrorCode;
@@ -222,7 +223,7 @@ class ExpenseControllerTest {
     private CreateExpenseRequest validRow() {
         CreateExpenseRequest request = new CreateExpenseRequest();
         request.setAmount(new BigDecimal("10.00"));
-        request.setCurrency("USD");
+        request.setCurrency(Currency.USD);
         request.setCategoryId(CATEGORY_ID);
         request.setSpentOn(LocalDate.now().minusDays(1));
         return request;

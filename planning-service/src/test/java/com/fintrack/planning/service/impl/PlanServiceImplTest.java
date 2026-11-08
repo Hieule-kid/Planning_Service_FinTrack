@@ -12,6 +12,7 @@ import com.fintrack.planning.model.MilestoneEntity;
 import com.fintrack.planning.model.PlanEntity;
 import com.fintrack.planning.model.enums.Currency;
 import com.fintrack.planning.model.enums.Frequency;
+import com.fintrack.planning.model.enums.MilestoneStatus;
 import com.fintrack.planning.model.enums.PlanCategory;
 import com.fintrack.planning.model.enums.TimeframeCategory;
 import com.fintrack.planning.repository.CurrencyTotals;
@@ -23,10 +24,13 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 
@@ -53,6 +57,7 @@ class PlanServiceImplTest {
 
     @Mock private PlanRepository planRepository;
     @Mock private MilestoneRepository milestoneRepository;
+    @Spy  private Clock clock = Clock.system(ZoneId.of("Asia/Ho_Chi_Minh"));
 
     @InjectMocks private PlanServiceImpl planService;
 
@@ -140,7 +145,7 @@ class PlanServiceImplTest {
 
         ArgumentCaptor<PlanEntity> captor = ArgumentCaptor.forClass(PlanEntity.class);
         verify(planRepository).save(captor.capture());
-        assertThat(captor.getValue().getStartDate()).isEqualTo(LocalDate.now());
+        assertThat(captor.getValue().getStartDate()).isEqualTo(LocalDate.now(clock));
     }
 
     @Test
@@ -259,7 +264,7 @@ class PlanServiceImplTest {
 
     @Test
     void listPlans_emptyRepository_returnsEmptyList() {
-        when(planRepository.findByUserIdOrderByCreatedAtDesc(USER_ID)).thenReturn(List.of());
+        when(planRepository.findByUserIdAndDeletedFalseOrderByCreatedAtDesc(USER_ID)).thenReturn(List.of());
 
         List<PlanSummaryResponse> result = planService.listPlans(USER_ID);
 
@@ -268,9 +273,9 @@ class PlanServiceImplTest {
 
     @Test
     void listPlans_returnsSummaryForEachPlan() {
-        when(planRepository.findByUserIdOrderByCreatedAtDesc(USER_ID))
+        when(planRepository.findByUserIdAndDeletedFalseOrderByCreatedAtDesc(USER_ID))
                 .thenReturn(List.of(defaultPlan));
-        when(milestoneRepository.findByPlanIdOrderBySequenceIndexAsc(PLAN_ID))
+        when(milestoneRepository.findByPlanIdInOrderBySequenceIndexAsc(List.of(PLAN_ID)))
                 .thenReturn(List.of());
 
         List<PlanSummaryResponse> result = planService.listPlans(USER_ID);
@@ -285,9 +290,9 @@ class PlanServiceImplTest {
         MilestoneEntity completed = buildMilestone("ms-1", new BigDecimal("100.00"),
                 new BigDecimal("100.00"), LocalDate.of(2027, 1, 31));
 
-        when(planRepository.findByUserIdOrderByCreatedAtDesc(USER_ID))
+        when(planRepository.findByUserIdAndDeletedFalseOrderByCreatedAtDesc(USER_ID))
                 .thenReturn(List.of(defaultPlan));
-        when(milestoneRepository.findByPlanIdOrderBySequenceIndexAsc(PLAN_ID))
+        when(milestoneRepository.findByPlanIdInOrderBySequenceIndexAsc(List.of(PLAN_ID)))
                 .thenReturn(List.of(completed));
 
         List<PlanSummaryResponse> result = planService.listPlans(USER_ID);
@@ -346,7 +351,7 @@ class PlanServiceImplTest {
 
     @Test
     void getPlan_returnsPlanResponse() {
-        when(planRepository.findById(PLAN_ID)).thenReturn(Optional.of(defaultPlan));
+        when(planRepository.findByIdAndUserIdAndDeletedFalse(PLAN_ID, USER_ID)).thenReturn(Optional.of(defaultPlan));
         when(milestoneRepository.findByPlanIdOrderBySequenceIndexAsc(PLAN_ID)).thenReturn(List.of());
 
         PlanResponse response = planService.getPlan(USER_ID, PLAN_ID);
@@ -357,7 +362,7 @@ class PlanServiceImplTest {
 
     @Test
     void getPlan_throwsNotFoundWhenPlanAbsent() {
-        when(planRepository.findById(PLAN_ID)).thenReturn(Optional.empty());
+        when(planRepository.findByIdAndUserIdAndDeletedFalse(PLAN_ID, USER_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> planService.getPlan(USER_ID, PLAN_ID))
                 .isInstanceOf(AppException.class)
@@ -366,24 +371,24 @@ class PlanServiceImplTest {
     }
 
     @Test
-    void getPlan_throwsNotFoundWhenPlanIsSoftDeleted() {
-        defaultPlan.setDeleted(true);
-        when(planRepository.findById(PLAN_ID)).thenReturn(Optional.of(defaultPlan));
-
+    void getPlan_looksUpThroughOwnerAndLegacySoftDeleteFilter() {
+        // Legacy soft-deleted rows and other users' plans are filtered in the query itself.
         assertThatThrownBy(() -> planService.getPlan(USER_ID, PLAN_ID))
                 .isInstanceOf(AppException.class)
                 .satisfies(ex -> assertThat(((AppException) ex).getErrorCode())
                         .isEqualTo(ErrorCode.RESOURCE_NOT_FOUND));
+
+        verify(planRepository).findByIdAndUserIdAndDeletedFalse(PLAN_ID, USER_ID);
+        verify(planRepository, never()).findById(anyString());
     }
 
     @Test
-    void getPlan_throwsForbiddenWhenWrongOwner() {
-        when(planRepository.findById(PLAN_ID)).thenReturn(Optional.of(defaultPlan));
+    void getPlan_throwsNotFoundWhenWrongOwner() {
 
         assertThatThrownBy(() -> planService.getPlan(OTHER_ID, PLAN_ID))
                 .isInstanceOf(AppException.class)
                 .satisfies(ex -> assertThat(((AppException) ex).getErrorCode())
-                        .isEqualTo(ErrorCode.FORBIDDEN));
+                        .isEqualTo(ErrorCode.RESOURCE_NOT_FOUND));
     }
 
     @Test
@@ -391,7 +396,7 @@ class PlanServiceImplTest {
         MilestoneEntity ms = buildMilestone(MS_ID, new BigDecimal("100.00"),
                 BigDecimal.ZERO, LocalDate.of(2099, 12, 31));
 
-        when(planRepository.findById(PLAN_ID)).thenReturn(Optional.of(defaultPlan));
+        when(planRepository.findByIdAndUserIdAndDeletedFalse(PLAN_ID, USER_ID)).thenReturn(Optional.of(defaultPlan));
         when(milestoneRepository.findByIdAndPlanId(MS_ID, PLAN_ID)).thenReturn(Optional.of(ms));
         when(milestoneRepository.save(ms)).thenReturn(ms);
         when(milestoneRepository.findByPlanIdOrderBySequenceIndexAsc(PLAN_ID)).thenReturn(List.of(ms));
@@ -408,7 +413,7 @@ class PlanServiceImplTest {
 
     @Test
     void updateMilestoneActualSaved_throwsNotFoundWhenPlanAbsent() {
-        when(planRepository.findById(PLAN_ID)).thenReturn(Optional.empty());
+        when(planRepository.findByIdAndUserIdAndDeletedFalse(PLAN_ID, USER_ID)).thenReturn(Optional.empty());
 
         UpdateMilestoneRequest req = new UpdateMilestoneRequest();
         req.setActualSaved(new BigDecimal("50.00"));
@@ -421,7 +426,7 @@ class PlanServiceImplTest {
 
     @Test
     void updateMilestoneActualSaved_throwsNotFoundWhenMilestoneAbsent() {
-        when(planRepository.findById(PLAN_ID)).thenReturn(Optional.of(defaultPlan));
+        when(planRepository.findByIdAndUserIdAndDeletedFalse(PLAN_ID, USER_ID)).thenReturn(Optional.of(defaultPlan));
         when(milestoneRepository.findByIdAndPlanId(MS_ID, PLAN_ID)).thenReturn(Optional.empty());
 
         UpdateMilestoneRequest req = new UpdateMilestoneRequest();
@@ -434,8 +439,7 @@ class PlanServiceImplTest {
     }
 
     @Test
-    void updateMilestoneActualSaved_throwsForbiddenWhenWrongOwner() {
-        when(planRepository.findById(PLAN_ID)).thenReturn(Optional.of(defaultPlan));
+    void updateMilestoneActualSaved_throwsNotFoundWhenWrongOwner() {
 
         UpdateMilestoneRequest req = new UpdateMilestoneRequest();
         req.setActualSaved(new BigDecimal("50.00"));
@@ -443,7 +447,7 @@ class PlanServiceImplTest {
         assertThatThrownBy(() -> planService.updateMilestoneActualSaved(OTHER_ID, PLAN_ID, MS_ID, req))
                 .isInstanceOf(AppException.class)
                 .satisfies(ex -> assertThat(((AppException) ex).getErrorCode())
-                        .isEqualTo(ErrorCode.FORBIDDEN));
+                        .isEqualTo(ErrorCode.RESOURCE_NOT_FOUND));
     }
 
     @Test
@@ -451,7 +455,7 @@ class PlanServiceImplTest {
         MilestoneEntity ms = buildMilestone(MS_ID, new BigDecimal("100.00"),
                 new BigDecimal("30.00"), LocalDate.of(2099, 12, 31));
 
-        when(planRepository.findById(PLAN_ID)).thenReturn(Optional.of(defaultPlan));
+        when(planRepository.findByIdAndUserIdAndDeletedFalse(PLAN_ID, USER_ID)).thenReturn(Optional.of(defaultPlan));
         when(milestoneRepository.findByIdAndPlanId(MS_ID, PLAN_ID)).thenReturn(Optional.of(ms));
         when(milestoneRepository.findByPlanIdOrderBySequenceIndexAsc(PLAN_ID)).thenReturn(List.of(ms));
         when(milestoneRepository.save(ms)).thenReturn(ms);
@@ -467,7 +471,7 @@ class PlanServiceImplTest {
         MilestoneEntity ms = buildMilestone(MS_ID, new BigDecimal("100.00"),
                 new BigDecimal("150.00"), LocalDate.of(2099, 12, 31));
 
-        when(planRepository.findById(PLAN_ID)).thenReturn(Optional.of(defaultPlan));
+        when(planRepository.findByIdAndUserIdAndDeletedFalse(PLAN_ID, USER_ID)).thenReturn(Optional.of(defaultPlan));
         when(milestoneRepository.findByIdAndPlanId(MS_ID, PLAN_ID)).thenReturn(Optional.of(ms));
         when(milestoneRepository.findByPlanIdOrderBySequenceIndexAsc(PLAN_ID)).thenReturn(List.of(ms));
         when(milestoneRepository.save(ms)).thenReturn(ms);
@@ -484,7 +488,7 @@ class PlanServiceImplTest {
         MilestoneEntity ms = buildMilestone(MS_ID, new BigDecimal("100.00"),
                 BigDecimal.ZERO, LocalDate.of(2099, 12, 31));
 
-        when(planRepository.findById(PLAN_ID)).thenReturn(Optional.of(defaultPlan));
+        when(planRepository.findByIdAndUserIdAndDeletedFalse(PLAN_ID, USER_ID)).thenReturn(Optional.of(defaultPlan));
         when(milestoneRepository.findByIdAndPlanId(MS_ID, PLAN_ID)).thenReturn(Optional.of(ms));
         when(milestoneRepository.findByPlanIdOrderBySequenceIndexAsc(PLAN_ID)).thenReturn(List.of(ms));
         when(milestoneRepository.save(ms)).thenReturn(ms);
@@ -497,7 +501,7 @@ class PlanServiceImplTest {
 
     @Test
     void completeMilestone_throwsNotFoundWhenPlanAbsent() {
-        when(planRepository.findById(PLAN_ID)).thenReturn(Optional.empty());
+        when(planRepository.findByIdAndUserIdAndDeletedFalse(PLAN_ID, USER_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> planService.completeMilestone(USER_ID, PLAN_ID, MS_ID))
                 .isInstanceOf(AppException.class)
@@ -507,7 +511,7 @@ class PlanServiceImplTest {
 
     @Test
     void completeMilestone_throwsNotFoundWhenMilestoneAbsent() {
-        when(planRepository.findById(PLAN_ID)).thenReturn(Optional.of(defaultPlan));
+        when(planRepository.findByIdAndUserIdAndDeletedFalse(PLAN_ID, USER_ID)).thenReturn(Optional.of(defaultPlan));
         when(milestoneRepository.findByIdAndPlanId(MS_ID, PLAN_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> planService.completeMilestone(USER_ID, PLAN_ID, MS_ID))
@@ -522,7 +526,7 @@ class PlanServiceImplTest {
                 new BigDecimal("100.00"), LocalDate.of(2099, 12, 31));
         ms.setManuallyCompleted(true);
 
-        when(planRepository.findById(PLAN_ID)).thenReturn(Optional.of(defaultPlan));
+        when(planRepository.findByIdAndUserIdAndDeletedFalse(PLAN_ID, USER_ID)).thenReturn(Optional.of(defaultPlan));
         when(milestoneRepository.findByIdAndPlanId(MS_ID, PLAN_ID)).thenReturn(Optional.of(ms));
         when(milestoneRepository.save(ms)).thenReturn(ms);
         when(milestoneRepository.findByPlanIdOrderBySequenceIndexAsc(PLAN_ID)).thenReturn(List.of(ms));
@@ -534,18 +538,17 @@ class PlanServiceImplTest {
     }
 
     @Test
-    void undoMilestone_throwsForbiddenWhenWrongOwner() {
-        when(planRepository.findById(PLAN_ID)).thenReturn(Optional.of(defaultPlan));
+    void undoMilestone_throwsNotFoundWhenWrongOwner() {
 
         assertThatThrownBy(() -> planService.undoMilestone(OTHER_ID, PLAN_ID, MS_ID))
                 .isInstanceOf(AppException.class)
                 .satisfies(ex -> assertThat(((AppException) ex).getErrorCode())
-                        .isEqualTo(ErrorCode.FORBIDDEN));
+                        .isEqualTo(ErrorCode.RESOURCE_NOT_FOUND));
     }
 
     @Test
     void undoMilestone_throwsNotFoundWhenMilestoneAbsent() {
-        when(planRepository.findById(PLAN_ID)).thenReturn(Optional.of(defaultPlan));
+        when(planRepository.findByIdAndUserIdAndDeletedFalse(PLAN_ID, USER_ID)).thenReturn(Optional.of(defaultPlan));
         when(milestoneRepository.findByIdAndPlanId(MS_ID, PLAN_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> planService.undoMilestone(USER_ID, PLAN_ID, MS_ID))
@@ -556,7 +559,7 @@ class PlanServiceImplTest {
 
     @Test
     void updateSettings_enablesRedistribution() {
-        when(planRepository.findById(PLAN_ID)).thenReturn(Optional.of(defaultPlan));
+        when(planRepository.findByIdAndUserIdAndDeletedFalse(PLAN_ID, USER_ID)).thenReturn(Optional.of(defaultPlan));
         when(planRepository.save(defaultPlan)).thenReturn(defaultPlan);
         when(milestoneRepository.findByPlanIdOrderBySequenceIndexAsc(PLAN_ID)).thenReturn(List.of());
 
@@ -573,7 +576,7 @@ class PlanServiceImplTest {
     @Test
     void updateSettings_disablesRedistribution() {
         defaultPlan.setRecalculateOnMissedDeadline(true);
-        when(planRepository.findById(PLAN_ID)).thenReturn(Optional.of(defaultPlan));
+        when(planRepository.findByIdAndUserIdAndDeletedFalse(PLAN_ID, USER_ID)).thenReturn(Optional.of(defaultPlan));
         when(planRepository.save(defaultPlan)).thenReturn(defaultPlan);
         when(milestoneRepository.findByPlanIdOrderBySequenceIndexAsc(PLAN_ID)).thenReturn(List.of());
 
@@ -586,8 +589,7 @@ class PlanServiceImplTest {
     }
 
     @Test
-    void updateSettings_throwsForbiddenWhenWrongOwner() {
-        when(planRepository.findById(PLAN_ID)).thenReturn(Optional.of(defaultPlan));
+    void updateSettings_throwsNotFoundWhenWrongOwner() {
 
         ToggleRecalculateRequest req = new ToggleRecalculateRequest();
         req.setRecalculateOnMissedDeadline(true);
@@ -595,24 +597,23 @@ class PlanServiceImplTest {
         assertThatThrownBy(() -> planService.updateSettings(OTHER_ID, PLAN_ID, req))
                 .isInstanceOf(AppException.class)
                 .satisfies(ex -> assertThat(((AppException) ex).getErrorCode())
-                        .isEqualTo(ErrorCode.FORBIDDEN));
+                        .isEqualTo(ErrorCode.RESOURCE_NOT_FOUND));
     }
 
     @Test
-    void deletePlan_deletesMilestonesAndSoftDeletesPlan() {
-        when(planRepository.findById(PLAN_ID)).thenReturn(Optional.of(defaultPlan));
-        when(planRepository.save(defaultPlan)).thenReturn(defaultPlan);
+    void deletePlan_hardDeletesMilestonesAndPlan() {
+        when(planRepository.findByIdAndUserIdAndDeletedFalse(PLAN_ID, USER_ID)).thenReturn(Optional.of(defaultPlan));
 
         planService.deletePlan(USER_ID, PLAN_ID);
 
         verify(milestoneRepository).deleteByPlanId(PLAN_ID);
-        assertThat(defaultPlan.isDeleted()).isTrue();
-        verify(planRepository).save(defaultPlan);
+        verify(planRepository).delete(defaultPlan);
+        verify(planRepository, never()).save(any(PlanEntity.class));
     }
 
     @Test
     void deletePlan_throwsNotFoundWhenPlanAbsent() {
-        when(planRepository.findById(PLAN_ID)).thenReturn(Optional.empty());
+        when(planRepository.findByIdAndUserIdAndDeletedFalse(PLAN_ID, USER_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> planService.deletePlan(USER_ID, PLAN_ID))
                 .isInstanceOf(AppException.class)
@@ -623,25 +624,73 @@ class PlanServiceImplTest {
     }
 
     @Test
-    void deletePlan_throwsForbiddenWhenWrongOwner() {
-        when(planRepository.findById(PLAN_ID)).thenReturn(Optional.of(defaultPlan));
+    void deletePlan_throwsNotFoundWhenWrongOwner() {
 
         assertThatThrownBy(() -> planService.deletePlan(OTHER_ID, PLAN_ID))
                 .isInstanceOf(AppException.class)
                 .satisfies(ex -> assertThat(((AppException) ex).getErrorCode())
-                        .isEqualTo(ErrorCode.FORBIDDEN));
+                        .isEqualTo(ErrorCode.RESOURCE_NOT_FOUND));
 
         verify(milestoneRepository, never()).deleteByPlanId(anyString());
     }
 
     @Test
     void deletePlan_throwsNotFoundWhenPlanAlreadyDeleted() {
-        defaultPlan.setDeleted(true);
-        when(planRepository.findById(PLAN_ID)).thenReturn(Optional.of(defaultPlan));
-
+        // A second delete finds nothing: the row is gone (or was soft-deleted before hard delete).
         assertThatThrownBy(() -> planService.deletePlan(USER_ID, PLAN_ID))
                 .isInstanceOf(AppException.class)
                 .satisfies(ex -> assertThat(((AppException) ex).getErrorCode())
                         .isEqualTo(ErrorCode.RESOURCE_NOT_FOUND));
+
+        verify(planRepository, never()).delete(any(PlanEntity.class));
+    }
+
+    @Test
+    void undoMilestone_restoresActualSavedThatCompletionToppedUp() {
+        MilestoneEntity ms = buildMilestone(MS_ID, new BigDecimal("100.00"),
+                new BigDecimal("30.00"), LocalDate.of(2099, 12, 31));
+        when(planRepository.findByIdAndUserIdAndDeletedFalse(PLAN_ID, USER_ID)).thenReturn(Optional.of(defaultPlan));
+        when(milestoneRepository.findByIdAndPlanId(MS_ID, PLAN_ID)).thenReturn(Optional.of(ms));
+        when(milestoneRepository.findByPlanIdOrderBySequenceIndexAsc(PLAN_ID)).thenReturn(List.of(ms));
+
+        planService.completeMilestone(USER_ID, PLAN_ID, MS_ID);
+        PlanResponse afterUndo = planService.undoMilestone(USER_ID, PLAN_ID, MS_ID);
+
+        assertThat(ms.getActualSaved()).isEqualByComparingTo("30.00");
+        assertThat(ms.getActualSavedBeforeCompletion()).isNull();
+        assertThat(ms.isManuallyCompleted()).isFalse();
+        assertThat(afterUndo.getMilestones().get(0).getStatus()).isEqualTo(MilestoneStatus.PENDING);
+    }
+
+    @Test
+    void completeMilestone_twiceDoesNotOverwriteRememberedAmount() {
+        MilestoneEntity ms = buildMilestone(MS_ID, new BigDecimal("100.00"),
+                new BigDecimal("30.00"), LocalDate.of(2099, 12, 31));
+        when(planRepository.findByIdAndUserIdAndDeletedFalse(PLAN_ID, USER_ID)).thenReturn(Optional.of(defaultPlan));
+        when(milestoneRepository.findByIdAndPlanId(MS_ID, PLAN_ID)).thenReturn(Optional.of(ms));
+        when(milestoneRepository.findByPlanIdOrderBySequenceIndexAsc(PLAN_ID)).thenReturn(List.of(ms));
+
+        planService.completeMilestone(USER_ID, PLAN_ID, MS_ID);
+        planService.completeMilestone(USER_ID, PLAN_ID, MS_ID);
+
+        assertThat(ms.getActualSavedBeforeCompletion()).isEqualByComparingTo("30.00");
+    }
+
+    @Test
+    void updateMilestoneActualSaved_explicitAmountSurvivesUndo() {
+        MilestoneEntity ms = buildMilestone(MS_ID, new BigDecimal("100.00"),
+                new BigDecimal("100.00"), LocalDate.of(2099, 12, 31));
+        ms.setManuallyCompleted(true);
+        ms.setActualSavedBeforeCompletion(new BigDecimal("30.00"));
+        when(planRepository.findByIdAndUserIdAndDeletedFalse(PLAN_ID, USER_ID)).thenReturn(Optional.of(defaultPlan));
+        when(milestoneRepository.findByIdAndPlanId(MS_ID, PLAN_ID)).thenReturn(Optional.of(ms));
+        when(milestoneRepository.findByPlanIdOrderBySequenceIndexAsc(PLAN_ID)).thenReturn(List.of(ms));
+
+        UpdateMilestoneRequest req = new UpdateMilestoneRequest();
+        req.setActualSaved(new BigDecimal("80.00"));
+        planService.updateMilestoneActualSaved(USER_ID, PLAN_ID, MS_ID, req);
+        planService.undoMilestone(USER_ID, PLAN_ID, MS_ID);
+
+        assertThat(ms.getActualSaved()).isEqualByComparingTo("80.00");
     }
 }

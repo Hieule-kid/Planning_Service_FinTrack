@@ -16,8 +16,8 @@ import java.util.Optional;
 /**
  * JPA repository for {@link Expense}.
  *
- * <p>{@code BaseEntity}'s soft-delete field is named {@code deleted}
- * (column {@code is_deleted}); all queries here filter {@code deleted = false}.
+ * <p>Expenses are now hard-deleted. Queries still filter {@code deleted = false} so rows
+ * soft-deleted before that change stay hidden.
  *
  */
 @Repository
@@ -37,7 +37,7 @@ public interface ExpenseRepository extends JpaRepository<Expense, String> {
               AND (:categoryId IS NULL OR e.categoryId = :categoryId)
             """;
 
-    Optional<Expense> findByIdAndDeletedFalse(String id);
+    Optional<Expense> findByIdAndUserIdAndDeletedFalse(String id, String userId);
 
     /**
      * Filtered, paginated search over a user's expenses.

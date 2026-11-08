@@ -1,5 +1,6 @@
 package com.fintrack.planning.service.impl;
 
+import com.fintrack.planning.model.enums.Currency;
 import com.fintrack.core.exception.AppException;
 import com.fintrack.core.exception.ErrorCode;
 import com.fintrack.planning.dto.request.CreateExpenseMultipleRequest;
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -55,6 +57,7 @@ class ExpenseServiceImplTest {
     @Mock private ExpenseRepository expenseRepository;
     @Mock private ExpenseCategoryRepository expenseCategoryRepository;
     @Mock private PlanRepository planRepository;
+    @Spy  private java.time.Clock clock = java.time.Clock.system(java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
 
     @InjectMocks private ExpenseServiceImpl expenseService;
 
@@ -319,7 +322,7 @@ class ExpenseServiceImplTest {
     private CreateExpenseRequest rowRequest(String categoryId, LocalDate spentOn) {
         CreateExpenseRequest request = new CreateExpenseRequest();
         request.setAmount(new BigDecimal("10.00"));
-        request.setCurrency("USD");
+        request.setCurrency(Currency.USD);
         request.setCategoryId(categoryId);
         request.setSpentOn(spentOn);
         return request;
@@ -338,7 +341,7 @@ class ExpenseServiceImplTest {
     private CreateExpenseRequest baseRequest() {
         CreateExpenseRequest request = new CreateExpenseRequest();
         request.setAmount(new BigDecimal("10.00"));
-        request.setCurrency("USD");
+        request.setCurrency(Currency.USD);
         request.setCategoryId(CATEGORY_ID);
         request.setSpentOn(LocalDate.now().minusDays(1));
         return request;

@@ -4,6 +4,7 @@ import com.fintrack.planning.model.MilestoneEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -15,6 +16,8 @@ import java.util.Optional;
 public interface MilestoneRepository extends JpaRepository<MilestoneEntity, String> {
 
     List<MilestoneEntity> findByPlanIdOrderBySequenceIndexAsc(String planId);
+
+    List<MilestoneEntity> findByPlanIdInOrderBySequenceIndexAsc(Collection<String> planIds);
 
     Optional<MilestoneEntity> findByIdAndPlanId(String id, String planId);
 

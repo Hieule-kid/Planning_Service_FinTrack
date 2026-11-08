@@ -166,35 +166,35 @@ class MilestoneCalculatorTest {
     void generateSchedule_longTermMonthly_useDurationInMonths_whenNoDurationInYears() {
         CreatePlanRequest request = new CreatePlanRequest();
         request.setGoalTitle("Retirement");
-        request.setTargetAmount(new BigDecimal("1200.00"));
+        request.setTargetAmount(new BigDecimal("7200.00"));
         request.setTimeframeCategory(TimeframeCategory.LONG_TERM);
-        request.setDurationInMonths(12); // 12 months, no durationInYears
+        request.setDurationInMonths(72); // 72 months, no durationInYears
         request.setFrequency(Frequency.MONTHLY);
         request.setRequiredPerPeriod(new BigDecimal("100.00"));
         request.setStartDate(LocalDate.of(2027, 1, 1));
 
         List<MilestoneEntity> schedule = MilestoneCalculator.generateSchedule(request);
 
-        assertThat(schedule).hasSize(12);
+        assertThat(schedule).hasSize(72);
     }
 
     @Test
     void generateSchedule_longTermAnnually_derivePeriodCountFromDurationInMonths() {
-        // durationInYears is null → effectiveMonths / 12 = 24 / 12 = 2
+        // durationInYears is null → ceil(effectiveMonths / 12) = ceil(61 / 12) = 6
         CreatePlanRequest request = new CreatePlanRequest();
         request.setGoalTitle("Education");
         request.setTargetAmount(new BigDecimal("2000.00"));
         request.setTimeframeCategory(TimeframeCategory.LONG_TERM);
-        request.setDurationInMonths(24);
+        request.setDurationInMonths(61);
         request.setFrequency(Frequency.ANNUALLY);
         request.setRequiredPerPeriod(new BigDecimal("1000.00"));
         request.setStartDate(LocalDate.of(2027, 1, 1));
 
         List<MilestoneEntity> schedule = MilestoneCalculator.generateSchedule(request);
 
-        assertThat(schedule).hasSize(2);
+        assertThat(schedule).hasSize(6);
         assertThat(schedule.get(0).getTimeline()).isEqualTo("Year 1 (2027)");
-        assertThat(schedule.get(1).getTimeline()).isEqualTo("Year 2 (2028)");
+        assertThat(schedule.get(5).getTimeline()).isEqualTo("Year 6 (2032)");
     }
 
     @Test
@@ -280,7 +280,7 @@ class MilestoneCalculatorTest {
         request.setGoalTitle("Bad Combo");
         request.setTargetAmount(new BigDecimal("100.00"));
         request.setTimeframeCategory(TimeframeCategory.MID_TERM);
-        request.setDurationInMonths(24);
+        request.setDurationInMonths(61);
         request.setFrequency(Frequency.ANNUALLY);
         request.setRequiredPerPeriod(new BigDecimal("50.00"));
         request.setStartDate(LocalDate.of(2027, 1, 1));
@@ -485,9 +485,9 @@ class MilestoneCalculatorTest {
     }
 
     @Test
-    void computeLiveMilestones_completedMilestoneNotADeficitSource() {
+    void computeLiveMilestones_manuallyCompletedShortfallStillOwedByOpenMilestones() {
         LocalDate now = LocalDate.of(2027, 3, 1);
-        // Completed (manuallyCompleted=true), deadline passed — should NOT contribute deficit
+        // Marked complete but only 50 of 100 actually saved: the plan target (200) must still be reached.
         MilestoneEntity completed = milestone("100.00", "50.00", true, LocalDate.of(2027, 1, 1));
         MilestoneEntity future = milestone("100.00", "0.00", false, LocalDate.of(2027, 6, 1));
 
@@ -495,8 +495,51 @@ class MilestoneCalculatorTest {
                 MilestoneCalculator.computeLiveMilestones(List.of(completed, future), true, now);
 
         assertThat(live.get(0).status()).isEqualTo(MilestoneStatus.COMPLETED);
-        // No deficit redistributed — future milestone's target is unchanged
-        assertThat(live.get(1).targetSavings()).isEqualByComparingTo("100.00");
+        assertThat(live.get(1).targetSavings()).isEqualByComparingTo("150.00");
+    }
+
+    @Test
+    void computeLiveMilestones_completingAReceiverDoesNotOverCollect() {
+        // Regression: target 300, M1 overdue with 0 → M2/M3 owe 150 each. After M2 is completed
+        // at 150, M3 must still owe 150 (total 300), not 200 (total 350).
+        LocalDate now = LocalDate.of(2026, 11, 8);
+        MilestoneEntity m1 = milestone("100.00", "0.00", false, LocalDate.of(2026, 10, 31));
+        MilestoneEntity m2 = milestone("100.00", "150.00", true, LocalDate.of(2026, 11, 30));
+        MilestoneEntity m3 = milestone("100.00", "0.00", false, LocalDate.of(2026, 12, 31));
+
+        List<MilestoneCalculator.LiveMilestone> live =
+                MilestoneCalculator.computeLiveMilestones(List.of(m1, m2, m3), true, now);
+
+        assertThat(live.get(2).targetSavings()).isEqualByComparingTo("150.00");
+        BigDecimal owedInTotal = m2.getActualSaved().add(live.get(2).targetSavings());
+        assertThat(owedInTotal).isEqualByComparingTo("300.00");
+    }
+
+    @Test
+    void computeLiveMilestones_overSavingEarlyLowersLaterTargets() {
+        LocalDate now = LocalDate.of(2027, 2, 1);
+        MilestoneEntity early = milestone("100.00", "160.00", false, LocalDate.of(2027, 1, 31));
+        MilestoneEntity f1 = milestone("100.00", "0.00", false, LocalDate.of(2027, 2, 28));
+        MilestoneEntity f2 = milestone("100.00", "0.00", false, LocalDate.of(2027, 3, 31));
+
+        List<MilestoneCalculator.LiveMilestone> live =
+                MilestoneCalculator.computeLiveMilestones(List.of(early, f1, f2), true, now);
+
+        assertThat(live.get(1).targetSavings()).isEqualByComparingTo("70.00");
+        assertThat(live.get(2).targetSavings()).isEqualByComparingTo("70.00");
+    }
+
+    @Test
+    void computeLiveMilestones_targetAlreadyReached_openMilestonesOweNothing() {
+        LocalDate now = LocalDate.of(2027, 2, 1);
+        MilestoneEntity early = milestone("100.00", "200.00", false, LocalDate.of(2027, 1, 31));
+        MilestoneEntity future = milestone("100.00", "0.00", false, LocalDate.of(2027, 2, 28));
+
+        List<MilestoneCalculator.LiveMilestone> live =
+                MilestoneCalculator.computeLiveMilestones(List.of(early, future), true, now);
+
+        assertThat(live.get(1).targetSavings()).isEqualByComparingTo("0.00");
+        assertThat(live.get(1).status()).isEqualTo(MilestoneStatus.COMPLETED);
     }
 
     @Test
@@ -559,7 +602,7 @@ class MilestoneCalculatorTest {
     }
 
     @Test
-    void computeTotals_sumsOnlyCompletedMilestonesAndClampsProgress() {
+    void computeTotals_countsPartialSavingsOnOpenMilestones() {
         LocalDate now = LocalDate.of(2027, 3, 1);
         MilestoneEntity completed = milestone("100.00", "100.00", false, LocalDate.of(2027, 1, 1));
         MilestoneEntity pending = milestone("100.00", "10.00", false, LocalDate.of(2027, 6, 1));
@@ -569,9 +612,9 @@ class MilestoneCalculatorTest {
 
         MilestoneCalculator.PlanTotals totals = MilestoneCalculator.computeTotals(live, new BigDecimal("200.00"));
 
-        assertThat(totals.totalSaved()).isEqualByComparingTo("100.00");
-        assertThat(totals.remaining()).isEqualByComparingTo("100.00");
-        assertThat(totals.progressPercent()).isEqualByComparingTo("50.00");
+        assertThat(totals.totalSaved()).isEqualByComparingTo("110.00");
+        assertThat(totals.remaining()).isEqualByComparingTo("90.00");
+        assertThat(totals.progressPercent()).isEqualByComparingTo("55.00");
     }
 
     @Test
@@ -590,7 +633,7 @@ class MilestoneCalculatorTest {
     }
 
     @Test
-    void computeTotals_allPending_totalSavedIsZeroAndProgressIsZero() {
+    void computeTotals_allPending_partialSavingsStillCount() {
         LocalDate now = LocalDate.of(2027, 1, 1);
         MilestoneEntity pending1 = milestone("100.00", "0.00", false, LocalDate.of(2027, 6, 1));
         MilestoneEntity pending2 = milestone("100.00", "50.00", false, LocalDate.of(2027, 12, 1));
@@ -600,13 +643,13 @@ class MilestoneCalculatorTest {
 
         MilestoneCalculator.PlanTotals totals = MilestoneCalculator.computeTotals(live, new BigDecimal("200.00"));
 
-        assertThat(totals.totalSaved()).isEqualByComparingTo("0.00");
-        assertThat(totals.remaining()).isEqualByComparingTo("200.00");
-        assertThat(totals.progressPercent()).isEqualByComparingTo("0.00");
+        assertThat(totals.totalSaved()).isEqualByComparingTo("50.00");
+        assertThat(totals.remaining()).isEqualByComparingTo("150.00");
+        assertThat(totals.progressPercent()).isEqualByComparingTo("25.00");
     }
 
     @Test
-    void computeTotals_overdueNotCountedTowardsTotalSaved() {
+    void computeTotals_partialSavingOnOverdueMilestoneCounts() {
         LocalDate now = LocalDate.of(2027, 6, 1);
         // Deadline passed but not completed
         MilestoneEntity overdue = milestone("100.00", "80.00", false, LocalDate.of(2027, 1, 1));
@@ -616,10 +659,9 @@ class MilestoneCalculatorTest {
 
         MilestoneCalculator.PlanTotals totals = MilestoneCalculator.computeTotals(live, new BigDecimal("100.00"));
 
-        // OVERDUE milestones do NOT count towards totalSaved
-        assertThat(totals.totalSaved()).isEqualByComparingTo("0.00");
-        assertThat(totals.remaining()).isEqualByComparingTo("100.00");
-        assertThat(totals.progressPercent()).isEqualByComparingTo("0.00");
+        assertThat(totals.totalSaved()).isEqualByComparingTo("80.00");
+        assertThat(totals.remaining()).isEqualByComparingTo("20.00");
+        assertThat(totals.progressPercent()).isEqualByComparingTo("80.00");
     }
 
     @Test
@@ -660,6 +702,38 @@ class MilestoneCalculatorTest {
         assertThat(totals.remaining()).isEqualByComparingTo("80.00");
         // 220 / 300 * 100 = 73.33%
         assertThat(totals.progressPercent()).isEqualByComparingTo("73.33");
+    }
+
+    @Test
+    void computeTotals_fullTargetSavedAcrossMixedStatuses_reports100Percent() {
+        // Regression: 90 + 100 + 110 = 300 of 300 used to report 70%.
+        LocalDate now = LocalDate.of(2026, 11, 8);
+        MilestoneEntity m1 = milestone("100.00", "90.00", false, LocalDate.of(2026, 10, 31));
+        MilestoneEntity m2 = milestone("100.00", "100.00", false, LocalDate.of(2026, 11, 30));
+        MilestoneEntity m3 = milestone("100.00", "110.00", false, LocalDate.of(2026, 12, 31));
+
+        List<MilestoneCalculator.LiveMilestone> live =
+                MilestoneCalculator.computeLiveMilestones(List.of(m1, m2, m3), false, now);
+        MilestoneCalculator.PlanTotals totals = MilestoneCalculator.computeTotals(live, new BigDecimal("300.00"));
+
+        assertThat(totals.progressPercent()).isEqualByComparingTo("100.00");
+        assertThat(totals.remaining()).isEqualByComparingTo("0.00");
+    }
+
+    @Test
+    void generateSchedule_rejectsDurationOutsideTimeframeRange() {
+        CreatePlanRequest request = new CreatePlanRequest();
+        request.setGoalTitle("Mislabelled");
+        request.setTargetAmount(new BigDecimal("1000.00"));
+        request.setTimeframeCategory(TimeframeCategory.SHORT_TERM);
+        request.setDurationInMonths(200);
+        request.setFrequency(Frequency.MONTHLY);
+        request.setRequiredPerPeriod(new BigDecimal("5.00"));
+        request.setStartDate(LocalDate.of(2027, 1, 1));
+
+        assertThatThrownBy(() -> MilestoneCalculator.generateSchedule(request))
+                .isInstanceOf(AppException.class)
+                .hasMessageContaining("3–11 months");
     }
 
     @ParameterizedTest

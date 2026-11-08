@@ -1,8 +1,10 @@
 package com.fintrack.planning.dto.ai;
 
+import java.math.BigDecimal;
+
 public record CategoryResponse(
         String name,
-        double percentage,
-        double amount,
+        BigDecimal percentage,
+        BigDecimal amount,
         String note
 ) {}

@@ -31,6 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -53,6 +54,9 @@ public class ExpenseServiceImpl implements ExpenseService {
     private final ExpenseRepository expenseRepository;
     private final ExpenseCategoryRepository expenseCategoryRepository;
     private final PlanRepository planRepository;
+    private final Clock clock;
+
+    static final int MAX_PAGE_SIZE = 100;
 
     /**
      * {@inheritDoc}
@@ -79,7 +83,8 @@ public class ExpenseServiceImpl implements ExpenseService {
                                                       String planId, ExpenseType type, String categoryId,
                                                       int page, int size) {
         DateRange range = DateRange.resolve(from, to);
-        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "spentOn"));
+        Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), MAX_PAGE_SIZE),
+                Sort.by(Sort.Direction.DESC, "spentOn"));
 
         Page<ExpenseResponse> result = expenseRepository
                 .search(userId, range.from(), range.to(), type, categoryId, pageable)
@@ -134,7 +139,7 @@ public class ExpenseServiceImpl implements ExpenseService {
             expense.setAmount(request.getAmount());
         }
         if (request.getCurrency() != null) {
-            expense.setCurrency(request.getCurrency());
+            expense.setCurrency(request.getCurrency().name());
         }
         if (request.getCategoryId() != null) {
             ExpenseCategory category = getOwnedCategoryOrThrow(userId, request.getCategoryId());
@@ -163,9 +168,8 @@ public class ExpenseServiceImpl implements ExpenseService {
     @Transactional
     public void deleteExpense(String userId, String expenseId) {
         Expense expense = getOwnedExpenseOrThrow(userId, expenseId);
-        expense.setDeleted(true);
-        expenseRepository.save(expense);
-        log.info("Soft-deleted expense: id={}, userId={}", expenseId, userId);
+        expenseRepository.delete(expense);
+        log.info("Deleted expense: id={}, userId={}", expenseId, userId);
     }
 
     /**
@@ -220,7 +224,7 @@ public class ExpenseServiceImpl implements ExpenseService {
      */
     private Optional<String> validateRow(String userId, CreateExpenseRequest row,
                                           Map<String, ExpenseCategory> categoriesById) {
-        if (row.getSpentOn() != null && row.getSpentOn().isAfter(LocalDate.now())) {
+        if (row.getSpentOn() != null && row.getSpentOn().isAfter(LocalDate.now(clock))) {
             return Optional.of("Expense date cannot be in the future");
         }
 
@@ -237,7 +241,7 @@ public class ExpenseServiceImpl implements ExpenseService {
                 .userId(userId)
                 .categoryId(category.getId())
                 .amount(row.getAmount())
-                .currency(row.getCurrency())
+                .currency(row.getCurrency().name())
                 .expenseType(category.getDefaultType())
                 .spentOn(row.getSpentOn())
                 .note(row.getNote())
@@ -246,7 +250,7 @@ public class ExpenseServiceImpl implements ExpenseService {
     }
 
     private void rejectFutureDate(LocalDate spentOn) {
-        if (spentOn != null && spentOn.isAfter(LocalDate.now())) {
+        if (spentOn != null && spentOn.isAfter(LocalDate.now(clock))) {
             throw new AppException(ErrorCode.INVALID_REQUEST, "Expense date cannot be in the future");
         }
     }
@@ -264,14 +268,10 @@ public class ExpenseServiceImpl implements ExpenseService {
     }
 
     private Expense getOwnedExpenseOrThrow(String userId, String expenseId) {
-        Expense expense = expenseRepository.findByIdAndDeletedFalse(expenseId)
+        // Missing, legacy soft-deleted and someone else's expense all look identical to the caller.
+        return expenseRepository.findByIdAndUserIdAndDeletedFalse(expenseId, userId)
                 .orElseThrow(() -> new AppException(ErrorCode.EXPENSE_NOT_FOUND,
                         "Expense not found with id: " + expenseId));
-
-        if (!expense.getUserId().equals(userId)) {
-            throw new AppException(ErrorCode.FORBIDDEN, "Expense does not belong to the current user");
-        }
-        return expense;
     }
 
     private void verifyPlanOwnership(String userId, String planId) {

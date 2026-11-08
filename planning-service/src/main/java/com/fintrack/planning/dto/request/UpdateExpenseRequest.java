@@ -1,5 +1,6 @@
 package com.fintrack.planning.dto.request;
 
+import com.fintrack.planning.model.enums.Currency;
 import com.fintrack.planning.model.enums.ExpenseType;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.DecimalMin;
@@ -23,8 +24,8 @@ public class UpdateExpenseRequest {
     @DecimalMin(value = "0.01", message = "Amount must be at least 0.01")
     private BigDecimal amount;
 
-    @Schema(description = "New ISO-4217 currency code")
-    private String currency;
+    @Schema(description = "New currency code (VND or USD, case-insensitive)")
+    private Currency currency;
 
     @Schema(description = "New category ID")
     private String categoryId;

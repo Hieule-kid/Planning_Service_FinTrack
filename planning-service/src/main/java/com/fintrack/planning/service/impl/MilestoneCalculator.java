@@ -108,6 +108,25 @@ public final class MilestoneCalculator {
         } else {
             throw new AppException(ErrorCode.INVALID_REQUEST, "Unsupported timeframe category");
         }
+
+        requireMonthsInRange(category, request.getDurationInMonths());
+    }
+
+    private static void requireMonthsInRange(TimeframeCategory category, Integer months) {
+        if (months == null) {
+            return; // legacy LONG_TERM plans may supply durationInYears only
+        }
+        int min;
+        int max;
+        switch (category) {
+            case SHORT_TERM -> { min = 3; max = 11; }
+            case MID_TERM -> { min = 12; max = 60; }
+            default -> { min = 61; max = 240; }
+        }
+        if (months < min || months > max) {
+            throw new AppException(ErrorCode.INVALID_REQUEST,
+                    category + " plans require a duration of " + min + "–" + max + " months, got " + months);
+        }
     }
 
     private static int resolvePeriodCount(CreatePlanRequest request) {
@@ -165,49 +184,45 @@ public final class MilestoneCalculator {
         }
 
         MilestoneStatus[] baseStatuses = new MilestoneStatus[milestones.size()];
-        for (int i = 0; i < milestones.size(); i++) {
-            baseStatuses[i] = deriveStatus(milestones.get(i), milestones.get(i).getBaseTargetSavings(), now);
-        }
-
-        BigDecimal totalDeficit = BigDecimal.ZERO;
-        for (int i = 0; i < milestones.size(); i++) {
-            if (baseStatuses[i] == MilestoneStatus.OVERDUE) {
-                MilestoneEntity m = milestones.get(i);
-                BigDecimal deficit = m.getBaseTargetSavings().subtract(m.getActualSaved());
-                if (deficit.compareTo(BigDecimal.ZERO) > 0) {
-                    totalDeficit = totalDeficit.add(deficit);
-                }
-            }
-        }
-
         List<Integer> receiverIndexes = new ArrayList<>();
+        BigDecimal planTarget = BigDecimal.ZERO;
+        BigDecimal savedOutsideReceivers = BigDecimal.ZERO;
         for (int i = 0; i < milestones.size(); i++) {
+            MilestoneEntity m = milestones.get(i);
+            baseStatuses[i] = deriveStatus(m, m.getBaseTargetSavings(), now);
+            planTarget = planTarget.add(m.getBaseTargetSavings());
             if (baseStatuses[i] == MilestoneStatus.PENDING) {
                 receiverIndexes.add(i);
+            } else {
+                savedOutsideReceivers = savedOutsideReceivers.add(m.getActualSaved());
             }
         }
 
-        BigDecimal share = BigDecimal.ZERO;
-        BigDecimal shareRemainder = BigDecimal.ZERO;
-        if (!receiverIndexes.isEmpty() && totalDeficit.compareTo(BigDecimal.ZERO) > 0) {
-            share = totalDeficit.divide(BigDecimal.valueOf(receiverIndexes.size()), 2, RoundingMode.DOWN);
-            shareRemainder = totalDeficit.subtract(share.multiply(BigDecimal.valueOf(receiverIndexes.size())));
+        if (receiverIndexes.isEmpty()) {
+            List<LiveMilestone> result = new ArrayList<>(milestones.size());
+            for (int i = 0; i < milestones.size(); i++) {
+                MilestoneEntity m = milestones.get(i);
+                result.add(new LiveMilestone(m, m.getBaseTargetSavings(), baseStatuses[i]));
+            }
+            return result;
         }
 
-        int lastReceiverIndex = receiverIndexes.isEmpty() ? -1 : receiverIndexes.get(receiverIndexes.size() - 1);
+        // Base targets always sum to the plan's target amount, so whatever the closed milestones
+        // (overdue or completed) did not cover — or over-covered — is what the open ones still owe.
+        BigDecimal owedByReceivers = planTarget.subtract(savedOutsideReceivers).max(BigDecimal.ZERO);
+        BigDecimal receiverCount = BigDecimal.valueOf(receiverIndexes.size());
+        BigDecimal share = owedByReceivers.divide(receiverCount, 2, RoundingMode.DOWN);
+        BigDecimal shareRemainder = owedByReceivers.subtract(share.multiply(receiverCount));
+        int lastReceiverIndex = receiverIndexes.get(receiverIndexes.size() - 1);
 
         List<LiveMilestone> result = new ArrayList<>(milestones.size());
         for (int i = 0; i < milestones.size(); i++) {
             MilestoneEntity m = milestones.get(i);
-            BigDecimal effectiveTarget = m.getBaseTargetSavings();
-
-            if (baseStatuses[i] == MilestoneStatus.PENDING && share.compareTo(BigDecimal.ZERO) > 0) {
-                effectiveTarget = effectiveTarget.add(share);
-                if (i == lastReceiverIndex) {
-                    effectiveTarget = effectiveTarget.add(shareRemainder);
-                }
+            if (baseStatuses[i] != MilestoneStatus.PENDING) {
+                result.add(new LiveMilestone(m, m.getBaseTargetSavings(), baseStatuses[i]));
+                continue;
             }
-
+            BigDecimal effectiveTarget = i == lastReceiverIndex ? share.add(shareRemainder) : share;
             result.add(new LiveMilestone(m, effectiveTarget, deriveStatus(m, effectiveTarget, now)));
         }
         return result;
@@ -224,11 +239,11 @@ public final class MilestoneCalculator {
     }
 
     public static PlanTotals computeTotals(List<LiveMilestone> liveMilestones, BigDecimal targetAmount) {
+        // Every amount actually put aside counts, including partial savings on milestones that are
+        // still open or already overdue — progress must reflect real money, not finished periods.
         BigDecimal totalSaved = BigDecimal.ZERO;
         for (LiveMilestone live : liveMilestones) {
-            if (live.status() == MilestoneStatus.COMPLETED) {
-                totalSaved = totalSaved.add(live.milestone().getActualSaved());
-            }
+            totalSaved = totalSaved.add(live.milestone().getActualSaved());
         }
 
         BigDecimal remaining = targetAmount.subtract(totalSaved);

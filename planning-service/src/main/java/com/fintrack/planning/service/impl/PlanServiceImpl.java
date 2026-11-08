@@ -24,8 +24,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Default implementation of {@link PlanService}.
@@ -43,6 +46,7 @@ public class PlanServiceImpl implements PlanService {
     private final PlanRepository planRepository;
     private final MilestoneRepository milestoneRepository;
     private final ChatClient chatClient;
+    private final Clock clock;
 
     /**
      * {@inheritDoc}
@@ -83,12 +87,23 @@ public class PlanServiceImpl implements PlanService {
      * {@inheritDoc}
      */
     @Override
+    @Transactional(readOnly = true)
     public List<PlanSummaryResponse> listPlans(String userId) {
-        return planRepository.findByUserIdOrderByCreatedAtDesc(userId).stream()
+        List<PlanEntity> plans = planRepository.findByUserIdAndDeletedFalseOrderByCreatedAtDesc(userId);
+        if (plans.isEmpty()) {
+            return List.of();
+        }
+        Map<String, List<MilestoneEntity>> milestonesByPlan = milestoneRepository
+                .findByPlanIdInOrderBySequenceIndexAsc(plans.stream().map(PlanEntity::getId).toList())
+                .stream()
+                .collect(Collectors.groupingBy(m -> m.getPlan().getId()));
+        LocalDate today = LocalDate.now(clock);
+
+        return plans.stream()
                 .map(plan -> {
-                    List<MilestoneEntity> milestones = milestoneRepository.findByPlanIdOrderBySequenceIndexAsc(plan.getId());
+                    List<MilestoneEntity> milestones = milestonesByPlan.getOrDefault(plan.getId(), List.of());
                     List<MilestoneCalculator.LiveMilestone> live = MilestoneCalculator.computeLiveMilestones(
-                            milestones, plan.isRecalculateOnMissedDeadline(), LocalDate.now());
+                            milestones, plan.isRecalculateOnMissedDeadline(), today);
                     MilestoneCalculator.PlanTotals totals = MilestoneCalculator.computeTotals(live, plan.getTargetAmount());
                     return toSummaryResponse(plan, totals);
                 })
@@ -120,6 +135,7 @@ public class PlanServiceImpl implements PlanService {
      * {@inheritDoc}
      */
     @Override
+    @Transactional(readOnly = true)
     public PlanResponse getPlan(String userId, String planId) {
         PlanEntity plan = getOwnedPlanOrThrow(userId, planId);
         List<MilestoneEntity> milestones = milestoneRepository.findByPlanIdOrderBySequenceIndexAsc(planId);
@@ -137,6 +153,7 @@ public class PlanServiceImpl implements PlanService {
         MilestoneEntity milestone = getOwnedMilestoneOrThrow(planId, milestoneId);
 
         milestone.setActualSaved(request.getActualSaved());
+        milestone.setActualSavedBeforeCompletion(null);
         milestoneRepository.save(milestone);
 
         log.debug("Updated milestone actualSaved: planId={}, milestoneId={}, actualSaved={}",
@@ -158,7 +175,11 @@ public class PlanServiceImpl implements PlanService {
         List<MilestoneEntity> milestones = milestoneRepository.findByPlanIdOrderBySequenceIndexAsc(planId);
         BigDecimal effectiveTarget = liveTargetFor(milestone, milestones, plan);
 
+        if (milestone.isManuallyCompleted()) {
+            return toPlanResponse(plan, milestones);
+        }
         if (milestone.getActualSaved().compareTo(effectiveTarget) < 0) {
+            milestone.setActualSavedBeforeCompletion(milestone.getActualSaved());
             milestone.setActualSaved(effectiveTarget);
         }
         milestone.setManuallyCompleted(true);
@@ -178,6 +199,13 @@ public class PlanServiceImpl implements PlanService {
         PlanEntity plan = getOwnedPlanOrThrow(userId, planId);
         MilestoneEntity milestone = getOwnedMilestoneOrThrow(planId, milestoneId);
 
+        if (!milestone.isManuallyCompleted()) {
+            return toPlanResponse(plan, milestoneRepository.findByPlanIdOrderBySequenceIndexAsc(planId));
+        }
+        if (milestone.getActualSavedBeforeCompletion() != null) {
+            milestone.setActualSaved(milestone.getActualSavedBeforeCompletion());
+            milestone.setActualSavedBeforeCompletion(null);
+        }
         milestone.setManuallyCompleted(false);
         milestoneRepository.save(milestone);
 
@@ -242,7 +270,7 @@ public class PlanServiceImpl implements PlanService {
 
     private void normalizeRequest(CreatePlanRequest request) {
         if (request.getStartDate() == null) {
-            request.setStartDate(LocalDate.now());
+            request.setStartDate(LocalDate.now(clock));
         }
 
         if (request.getDuration() != null && request.getDurationInMonths() == null) {
@@ -266,13 +294,9 @@ public class PlanServiceImpl implements PlanService {
     }
 
     private PlanEntity getOwnedPlanOrThrow(String userId, String planId) {
-        PlanEntity plan = planRepository.findById(planId)
+        // Missing, legacy soft-deleted and someone else's plan all look identical to the caller.
+        return planRepository.findByIdAndUserIdAndDeletedFalse(planId, userId)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Plan not found with id: " + planId));
-
-        if (!plan.getUserId().equals(userId)) {
-            throw new AppException(ErrorCode.FORBIDDEN, "Plan does not belong to the current user");
-        }
-        return plan;
     }
 
     private MilestoneEntity getOwnedMilestoneOrThrow(String planId, String milestoneId) {
@@ -282,7 +306,7 @@ public class PlanServiceImpl implements PlanService {
     }
 
     private BigDecimal liveTargetFor(MilestoneEntity milestone, List<MilestoneEntity> milestones, PlanEntity plan) {
-        return MilestoneCalculator.computeLiveMilestones(milestones, plan.isRecalculateOnMissedDeadline(), LocalDate.now())
+        return MilestoneCalculator.computeLiveMilestones(milestones, plan.isRecalculateOnMissedDeadline(), LocalDate.now(clock))
                 .stream()
                 .filter(live -> live.milestone().getId().equals(milestone.getId()))
                 .findFirst()
@@ -292,7 +316,7 @@ public class PlanServiceImpl implements PlanService {
 
     private PlanResponse toPlanResponse(PlanEntity plan, List<MilestoneEntity> milestones) {
         List<MilestoneCalculator.LiveMilestone> live = MilestoneCalculator.computeLiveMilestones(
-                milestones, plan.isRecalculateOnMissedDeadline(), LocalDate.now());
+                milestones, plan.isRecalculateOnMissedDeadline(), LocalDate.now(clock));
         MilestoneCalculator.PlanTotals totals = MilestoneCalculator.computeTotals(live, plan.getTargetAmount());
 
         List<MilestoneResponse> milestoneResponses = live.stream()
