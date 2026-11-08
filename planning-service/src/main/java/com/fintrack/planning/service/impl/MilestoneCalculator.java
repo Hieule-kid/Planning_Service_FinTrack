@@ -30,6 +30,10 @@ public final class MilestoneCalculator {
 
     private static final DateTimeFormatter MONTH_YEAR_FORMATTER =
             DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH);
+    private static final DateTimeFormatter DAY_MONTH_YEAR_FORMATTER =
+            DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH);
+    private static final DateTimeFormatter MONTH_YEAR_SHORT_FORMATTER =
+            DateTimeFormatter.ofPattern("MMM yyyy", Locale.ENGLISH);
 
     private MilestoneCalculator() {
         throw new UnsupportedOperationException("MilestoneCalculator is a utility class");
@@ -152,18 +156,24 @@ public final class MilestoneCalculator {
                 yield new IntervalDates("Day " + (index + 1), day, day);
             }
             case MONTHLY -> {
-                YearMonth month = YearMonth.from(startDate).plusMonths(index);
-                yield new IntervalDates(
-                        month.format(MONTH_YEAR_FORMATTER),
-                        month.atDay(1),
-                        month.atEndOfMonth());
+                // Periods are anchored on startDate (each always computed from it, so month-length
+                // clamping — e.g. Jan 31 → Feb 28 — never accumulates into gaps or overlaps). A plan
+                // starting mid-month therefore gets a full first month instead of the calendar tail.
+                LocalDate from = startDate.plusMonths(index);
+                LocalDate to = startDate.plusMonths(index + 1L).minusDays(1);
+                String label = startDate.getDayOfMonth() == 1
+                        ? YearMonth.from(from).format(MONTH_YEAR_FORMATTER)
+                        : "Month " + (index + 1) + " (" + from.format(DAY_MONTH_YEAR_FORMATTER)
+                                + " – " + to.format(DAY_MONTH_YEAR_FORMATTER) + ")";
+                yield new IntervalDates(label, from, to);
             }
             case ANNUALLY -> {
-                int year = startDate.getYear() + index;
-                yield new IntervalDates(
-                        "Year " + (index + 1) + " (" + year + ")",
-                        LocalDate.of(year, 1, 1),
-                        LocalDate.of(year, 12, 31));
+                LocalDate from = startDate.plusYears(index);
+                LocalDate to = startDate.plusYears(index + 1L).minusDays(1);
+                String range = startDate.getDayOfYear() == 1
+                        ? String.valueOf(from.getYear())
+                        : from.format(MONTH_YEAR_SHORT_FORMATTER) + " – " + to.format(MONTH_YEAR_SHORT_FORMATTER);
+                yield new IntervalDates("Year " + (index + 1) + " (" + range + ")", from, to);
             }
         };
     }

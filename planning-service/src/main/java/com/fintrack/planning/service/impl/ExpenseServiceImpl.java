@@ -67,6 +67,9 @@ public class ExpenseServiceImpl implements ExpenseService {
         rejectFutureDate(request.getSpentOn());
 
         ExpenseCategory category = getOwnedCategoryOrThrow(userId, request.getCategoryId());
+        if (hasText(request.getPlanId())) {
+            verifyPlanOwnership(userId, request.getPlanId());
+        }
 
         Expense expense = expenseRepository.save(buildExpense(userId, request, category));
 
@@ -87,7 +90,7 @@ public class ExpenseServiceImpl implements ExpenseService {
                 Sort.by(Sort.Direction.DESC, "spentOn"));
 
         Page<ExpenseResponse> result = expenseRepository
-                .search(userId, range.from(), range.to(), type, categoryId, pageable)
+                .search(userId, range.from(), range.to(), type, categoryId, blankToNull(planId), pageable)
                 .map(this::toResponse);
 
         return PageResponse.of(result);
@@ -99,11 +102,12 @@ public class ExpenseServiceImpl implements ExpenseService {
     @Override
     @Transactional(readOnly = true)
     public ExpenseSummaryResponse getSummary(String userId, LocalDate from, LocalDate to,
-                                                   ExpenseType type, String categoryId) {
+                                                   ExpenseType type, String categoryId, String planId) {
         DateRange range = DateRange.resolve(from, to);
+        String planFilter = blankToNull(planId);
 
         List<ExpenseCurrencySummaryResponse> totals = expenseRepository
-                .summarizeByCurrency(userId, range.from(), range.to(), type, categoryId).stream()
+                .summarizeByCurrency(userId, range.from(), range.to(), type, categoryId, planFilter).stream()
                 .map(row -> ExpenseCurrencySummaryResponse.builder()
                         .currency(row.getCurrency())
                         .count(row.getExpenseCount())
@@ -118,6 +122,7 @@ public class ExpenseServiceImpl implements ExpenseService {
                 .to(range.to())
                 .type(type)
                 .categoryId(categoryId)
+                .planId(planFilter)
                 .totals(totals)
                 .build();
     }
@@ -155,6 +160,14 @@ public class ExpenseServiceImpl implements ExpenseService {
         if (request.getNote() != null) {
             expense.setNote(request.getNote());
         }
+        if (request.getPlanId() != null) {
+            if (hasText(request.getPlanId())) {
+                verifyPlanOwnership(userId, request.getPlanId());
+                expense.setPlanId(request.getPlanId());
+            } else {
+                expense.setPlanId(null);
+            }
+        }
 
         expenseRepository.save(expense);
         log.info("Updated expense: id={}, userId={}", expenseId, userId);
@@ -180,8 +193,9 @@ public class ExpenseServiceImpl implements ExpenseService {
     public CreateExpenseMultipleResponse createExpenseMultiple(String userId, CreateExpenseMultipleRequest request) {
         List<CreateExpenseRequest> rows = request.getExpenses();
         Map<String, ExpenseCategory> categoriesById = findCategoriesByIdIn(rows);
+        Set<String> ownedPlanIds = findOwnedPlanIdsIn(userId, rows);
 
-        List<String> errors = collectRowErrors(userId, rows, categoriesById);
+        List<String> errors = collectRowErrors(userId, rows, categoriesById, ownedPlanIds);
         if (!errors.isEmpty()) {
             throw new AppException(ErrorCode.VALIDATION_ERROR, String.join("; ", errors));
         }
@@ -206,14 +220,28 @@ public class ExpenseServiceImpl implements ExpenseService {
                 .collect(Collectors.toMap(ExpenseCategory::getId, Function.identity()));
     }
 
+    private Set<String> findOwnedPlanIdsIn(String userId, List<CreateExpenseRequest> rows) {
+        Set<String> planIds = rows.stream()
+                .map(CreateExpenseRequest::getPlanId)
+                .filter(ExpenseServiceImpl::hasText)
+                .collect(Collectors.toSet());
+        if (planIds.isEmpty()) {
+            return Set.of();
+        }
+        return planRepository.findAllById(planIds).stream()
+                .filter(plan -> !plan.isDeleted() && plan.getUserId().equals(userId))
+                .map(PlanEntity::getId)
+                .collect(Collectors.toSet());
+    }
+
     /**
      * Validates every row up front so a batch failure reports every offending row at once,
      * rather than stopping at the first one.
      */
     private List<String> collectRowErrors(String userId, List<CreateExpenseRequest> rows,
-                                           Map<String, ExpenseCategory> categoriesById) {
+                                           Map<String, ExpenseCategory> categoriesById, Set<String> ownedPlanIds) {
         return IntStream.range(0, rows.size())
-                .mapToObj(i -> validateRow(userId, rows.get(i), categoriesById)
+                .mapToObj(i -> validateRow(userId, rows.get(i), categoriesById, ownedPlanIds)
                         .map(error -> "Row " + (i + 1) + ": " + error))
                 .flatMap(Optional::stream)
                 .toList();
@@ -223,7 +251,7 @@ public class ExpenseServiceImpl implements ExpenseService {
      * @return the row's failure reason, or empty if the row is valid.
      */
     private Optional<String> validateRow(String userId, CreateExpenseRequest row,
-                                          Map<String, ExpenseCategory> categoriesById) {
+                                          Map<String, ExpenseCategory> categoriesById, Set<String> ownedPlanIds) {
         if (row.getSpentOn() != null && row.getSpentOn().isAfter(LocalDate.now(clock))) {
             return Optional.of("Expense date cannot be in the future");
         }
@@ -233,6 +261,10 @@ public class ExpenseServiceImpl implements ExpenseService {
             return Optional.of("Expense category not found with id: " + row.getCategoryId());
         }
 
+        if (hasText(row.getPlanId()) && !ownedPlanIds.contains(row.getPlanId())) {
+            return Optional.of("Linked plan not found with id: " + row.getPlanId());
+        }
+
         return Optional.empty();
     }
 
@@ -240,6 +272,7 @@ public class ExpenseServiceImpl implements ExpenseService {
         return Expense.builder()
                 .userId(userId)
                 .categoryId(category.getId())
+                .planId(blankToNull(row.getPlanId()))
                 .amount(row.getAmount())
                 .currency(row.getCurrency().name())
                 .expenseType(category.getDefaultType())
@@ -275,19 +308,25 @@ public class ExpenseServiceImpl implements ExpenseService {
     }
 
     private void verifyPlanOwnership(String userId, String planId) {
-        PlanEntity plan = planRepository.findById(planId)
-                .orElseThrow(() -> new AppException(ErrorCode.EXPENSE_PLAN_MISMATCH,
-                        "Linked plan not found with id: " + planId));
-
-        if (!plan.getUserId().equals(userId)) {
+        // Same error whether the plan is missing or someone else's, so plan IDs cannot be probed.
+        if (planRepository.findByIdAndUserIdAndDeletedFalse(planId, userId).isEmpty()) {
             throw new AppException(ErrorCode.EXPENSE_PLAN_MISMATCH,
-                    "Linked plan does not belong to the current user");
+                    "Linked plan not found with id: " + planId);
         }
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    private static String blankToNull(String value) {
+        return hasText(value) ? value : null;
     }
 
     private ExpenseResponse toResponse(Expense expense) {
         return ExpenseResponse.builder()
                 .id(expense.getId())
+                .planId(expense.getPlanId())
                 .categoryId(expense.getCategoryId())
                 .amount(expense.getAmount())
                 .currency(expense.getCurrency())

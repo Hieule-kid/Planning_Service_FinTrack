@@ -94,7 +94,7 @@ public class ExpenseController {
         summary = "Spent / fixed / variable totals, optionally for a date range",
         description = "Totals per currency (never combined) over ALL expenses matching the same filters as the list "
                 + "endpoint, independent of its paging. Same date rules: both 'from' and 'to' or neither (neither = all "
-                + "time), no maximum span. The response echoes the applied filter (from/to/type/categoryId, null when "
+                + "time), no maximum span. The response echoes the applied filter (from/to/type/categoryId/planId, null when "
                 + "unset) and returns money as strings."
     )
     @ApiResponses({
@@ -108,8 +108,10 @@ public class ExpenseController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(required = false) ExpenseType type,
-            @RequestParam(required = false) String categoryId) {
-        return ResponseEntity.ok(ApiResponse.success(expenseService.getSummary(userId, from, to, type, categoryId)));
+            @RequestParam(required = false) String categoryId,
+            @RequestParam(required = false) String planId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                expenseService.getSummary(userId, from, to, type, categoryId, planId)));
     }
 
     @Operation(summary = "Partially update an expense", description = "PATCH semantics — only the supplied fields change. The only place to override the fixed/variable type.")

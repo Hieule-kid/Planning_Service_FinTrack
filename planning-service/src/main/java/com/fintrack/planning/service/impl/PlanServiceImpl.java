@@ -14,6 +14,7 @@ import com.fintrack.planning.model.MilestoneEntity;
 import com.fintrack.planning.model.PlanEntity;
 import com.fintrack.planning.model.enums.Currency;
 import com.fintrack.planning.model.enums.TimeframeCategory;
+import com.fintrack.planning.repository.ExpenseRepository;
 import com.fintrack.planning.repository.MilestoneRepository;
 import com.fintrack.planning.repository.PlanRepository;
 import com.fintrack.planning.service.PlanService;
@@ -45,6 +46,7 @@ public class PlanServiceImpl implements PlanService {
 
     private final PlanRepository planRepository;
     private final MilestoneRepository milestoneRepository;
+    private final ExpenseRepository expenseRepository;
     private final ChatClient chatClient;
     private final Clock clock;
 
@@ -238,6 +240,7 @@ public class PlanServiceImpl implements PlanService {
     public void deletePlan(String userId, String planId) {
         PlanEntity plan = getOwnedPlanOrThrow(userId, planId);
 
+        expenseRepository.unlinkPlan(planId);
         milestoneRepository.deleteByPlanId(planId);
         planRepository.delete(plan);
 

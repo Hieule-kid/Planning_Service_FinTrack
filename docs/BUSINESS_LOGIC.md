@@ -57,11 +57,19 @@ values are permitted (see `TimeframeCategory`, `Frequency`, `MilestoneCalculator
 - `durationInMonths` is the field used for `SHORT_TERM`/`MID_TERM` plans. `durationInYears` is a
   legacy field retained for `LONG_TERM` plans created before the flat-duration (`durationInMonths`)
   migration (see `PlanEntity`).
-- Each milestone's timeline label and date window are derived from its position in the schedule and
-  the plan's frequency: `DAILY` → `"Day N"` labeling a single calendar day; `MONTHLY` →
-  `"Month YYYY"` labeling a calendar month (deadline = last day of that month); `ANNUALLY` →
-  `"Year N (YYYY)"` labeling a calendar year (deadline = December 31st)
-  (see `MilestoneCalculator.resolveIntervalDates`).
+- Each milestone's date window is anchored on the plan's `startDate`, so the first milestone is
+  always a full period. A plan starting mid-month does not get only the tail of the calendar month
+  (see `MilestoneCalculator.resolveIntervalDates`):
+  - `DAILY` → `"Day N"`, a single day (`startDate + N-1 days`).
+  - `MONTHLY` → milestone *i* runs from `startDate + i months` to the day before
+    `startDate + (i+1) months`. Every bound is computed from `startDate` itself, so month-length
+    clamping (Jan 31 → Feb 28/29) never accumulates into gaps or overlaps. Label: `"November 2026"`
+    when the plan starts on the 1st (the window is then exactly that calendar month), otherwise
+    `"Month N (25 Nov 2026 – 24 Dec 2026)"`.
+  - `ANNUALLY` → milestone *i* runs from `startDate + i years` to the day before
+    `startDate + (i+1) years`. Label: `"Year N (2027)"` when the plan starts on Jan 1, otherwise
+    `"Year N (Jun 2027 – Jun 2028)"`.
+  - Schedules persisted before this rule keep their calendar-aligned windows; only new plans use it.
 
 ## Progress Tracking & Live Status
 
@@ -124,9 +132,18 @@ values are permitted (see `TimeframeCategory`, `Frequency`, `MilestoneCalculator
   supply both `from` and `to` or neither — supplying only one is rejected, as is `to` before `from`.
   There is no maximum span (see `DateRange.resolve`, `ExpenseController`,
   `ExpenseServiceImpl.listExpenses`).
-- Not implemented yet: requests accept a `planId`, but `Expense` has no column for it, so the value
-  is silently dropped and the list endpoint's `planId` filter is ignored.
-  `ExpenseServiceImpl.verifyPlanOwnership` exists for when the link is added and is currently unused.
+- An expense can optionally be linked to one of the caller's savings plans (`planId`, nullable column
+  `expenses.plan_id`). On create, bulk create and update, the plan must exist, not be soft-deleted
+  and belong to the caller. Otherwise the request fails with `EXPENSE_PLAN_MISMATCH` (bulk: a per-row
+  message, nothing saved). The error is the same whether the plan is missing or someone else's, so
+  plan IDs cannot be probed (see `ExpenseServiceImpl.verifyPlanOwnership`,
+  `ExpenseServiceImpl.findOwnedPlanIdsIn`).
+- On `PATCH`, `planId` omitted/null leaves the link unchanged and an empty string unlinks it.
+- The list **and** the summary both accept an optional `planId` filter through the shared
+  `SEARCH_FILTER`, so they still cannot disagree; the summary echoes it back.
+- Deleting a plan clears `plan_id` on every expense linked to it before the plan is removed, so no
+  expense points at a plan that no longer exists. The expense itself is kept, since it is still real
+  spending (see `ExpenseRepository.unlinkPlan`, `PlanServiceImpl.deletePlan`).
 - `currency` is restricted to the `Currency` enum (`VND`/`USD`, case-insensitive on input) and
   stored uppercase, so the per-currency summary never splits `usd` from `USD`.
 - `GET /expenses` pages are clamped to `size` 1–100 (`ExpenseServiceImpl.MAX_PAGE_SIZE`).
@@ -138,15 +155,19 @@ values are permitted (see `TimeframeCategory`, `Frequency`, `MilestoneCalculator
 ## Expense Categories
 
 - The first time a user requests their expense categories, six system-default categories are
-  seeded transactionally and returned: **Rent**, **Utilities**, **Subscriptions** (all `FIXED`),
-  and **Groceries**, **Transport**, **Dining out** (all `VARIABLE`) — insertion order is preserved
-  in the response (see `ExpenseCategoryServiceImpl.listCategories`,
-  `ExpenseCategoryServiceImpl.SYSTEM_DEFAULTS`).
+  seeded and returned: **Rent**, **Utilities**, **Subscriptions** (all `FIXED`), and **Groceries**,
+  **Transport**, **Dining out** (all `VARIABLE`) — insertion order is preserved in the response
+  (see `ExpenseCategoryServiceImpl.listCategories`, `ExpenseCategorySeeder.SYSTEM_DEFAULTS`).
+- Seeding runs in its own `REQUIRES_NEW` transaction (`ExpenseCategorySeeder.seedDefaults`). When two
+  first-time requests race (e.g. the frontend loading two widgets at once), the loser hits
+  `uk_expense_categories_user_name`. Only its own seeding rolls back, and it returns the categories
+  the winner inserted instead of a 500.
 - The `system` flag (serialized as `isSystem`) distinguishes auto-seeded defaults (`true`) from
   user-created categories (`false`), so the frontend can tell the two apart
   (see `ExpenseCategory.system`, `ExpenseCategoryResponse.system`).
 - Creating a category rejects a name the user already uses, case-insensitively (e.g. "Groceries"
-  collides with "groceries"), returning a 409 `DUPLICATE_CATEGORY_NAME`
+  collides with "groceries"), returning a 409 `DUPLICATE_CATEGORY_NAME`. A same-name category created
+  concurrently, which slips past that pre-check, is caught at insert and gets the same 409
   (see `ExpenseCategoryServiceImpl.createCategory`,
   `ExpenseCategoryRepository.existsByUserIdAndNameIgnoreCaseAndDeletedFalse`).
 

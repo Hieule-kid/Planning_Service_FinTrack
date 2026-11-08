@@ -16,6 +16,7 @@ import com.fintrack.planning.model.enums.MilestoneStatus;
 import com.fintrack.planning.model.enums.PlanCategory;
 import com.fintrack.planning.model.enums.TimeframeCategory;
 import com.fintrack.planning.repository.CurrencyTotals;
+import com.fintrack.planning.repository.ExpenseRepository;
 import com.fintrack.planning.repository.MilestoneRepository;
 import com.fintrack.planning.repository.PlanRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -57,6 +58,7 @@ class PlanServiceImplTest {
 
     @Mock private PlanRepository planRepository;
     @Mock private MilestoneRepository milestoneRepository;
+    @Mock private ExpenseRepository expenseRepository;
     @Spy  private Clock clock = Clock.system(ZoneId.of("Asia/Ho_Chi_Minh"));
 
     @InjectMocks private PlanServiceImpl planService;
@@ -606,6 +608,7 @@ class PlanServiceImplTest {
 
         planService.deletePlan(USER_ID, PLAN_ID);
 
+        verify(expenseRepository).unlinkPlan(PLAN_ID);
         verify(milestoneRepository).deleteByPlanId(PLAN_ID);
         verify(planRepository).delete(defaultPlan);
         verify(planRepository, never()).save(any(PlanEntity.class));

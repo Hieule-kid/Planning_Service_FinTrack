@@ -25,12 +25,12 @@ public interface ExpenseService {
                                                int page, int size);
 
     /**
-     * Totals per currency over every expense matching the same window/type/category filters as
+     * Totals per currency over every expense matching the same window/type/category/plan filters as
      * {@link #listExpenses}, plus the resolved filter that was applied. {@code totals} is empty when
      * nothing matches.
      */
     ExpenseSummaryResponse getSummary(String userId, LocalDate from, LocalDate to,
-                                      ExpenseType type, String categoryId);
+                                      ExpenseType type, String categoryId, String planId);
 
     ExpenseResponse updateExpense(String userId, String expenseId, UpdateExpenseRequest request);
 

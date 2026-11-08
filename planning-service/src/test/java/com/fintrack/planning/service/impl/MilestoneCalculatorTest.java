@@ -39,9 +39,10 @@ class MilestoneCalculatorTest {
         assertThat(schedule).hasSize(1);
         MilestoneEntity only = schedule.get(0);
         assertThat(only.getBaseTargetSavings()).isEqualByComparingTo("1000.00");
-        assertThat(only.getTimeline()).isEqualTo("Year 1 (2027)");
-        assertThat(only.getPeriodDate()).isEqualTo(LocalDate.of(2027, 1, 1));
-        assertThat(only.getDeadline()).isEqualTo(LocalDate.of(2027, 12, 31));
+        // A full year anchored on the start date, not the calendar-year tail
+        assertThat(only.getTimeline()).isEqualTo("Year 1 (Jan 2027 – Jan 2028)");
+        assertThat(only.getPeriodDate()).isEqualTo(LocalDate.of(2027, 1, 15));
+        assertThat(only.getDeadline()).isEqualTo(LocalDate.of(2028, 1, 14));
         assertThat(only.getSequenceIndex()).isZero();
     }
 
@@ -211,14 +212,14 @@ class MilestoneCalculatorTest {
         List<MilestoneEntity> schedule = MilestoneCalculator.generateSchedule(request);
 
         assertThat(schedule).hasSize(3);
-        assertThat(schedule.get(0).getTimeline()).isEqualTo("Year 1 (2027)");
-        assertThat(schedule.get(1).getTimeline()).isEqualTo("Year 2 (2028)");
-        assertThat(schedule.get(2).getTimeline()).isEqualTo("Year 3 (2029)");
+        assertThat(schedule.get(0).getTimeline()).isEqualTo("Year 1 (Jun 2027 – Jun 2028)");
+        assertThat(schedule.get(1).getTimeline()).isEqualTo("Year 2 (Jun 2028 – Jun 2029)");
+        assertThat(schedule.get(2).getTimeline()).isEqualTo("Year 3 (Jun 2029 – Jun 2030)");
 
-        assertThat(schedule.get(0).getPeriodDate()).isEqualTo(LocalDate.of(2027, 1, 1));
-        assertThat(schedule.get(0).getDeadline()).isEqualTo(LocalDate.of(2027, 12, 31));
-        assertThat(schedule.get(1).getPeriodDate()).isEqualTo(LocalDate.of(2028, 1, 1));
-        assertThat(schedule.get(1).getDeadline()).isEqualTo(LocalDate.of(2028, 12, 31));
+        assertThat(schedule.get(0).getPeriodDate()).isEqualTo(LocalDate.of(2027, 6, 15));
+        assertThat(schedule.get(0).getDeadline()).isEqualTo(LocalDate.of(2028, 6, 14));
+        assertThat(schedule.get(1).getPeriodDate()).isEqualTo(LocalDate.of(2028, 6, 15));
+        assertThat(schedule.get(1).getDeadline()).isEqualTo(LocalDate.of(2029, 6, 14));
     }
 
     @Test
@@ -718,6 +719,49 @@ class MilestoneCalculatorTest {
 
         assertThat(totals.progressPercent()).isEqualByComparingTo("100.00");
         assertThat(totals.remaining()).isEqualByComparingTo("0.00");
+    }
+
+    @Test
+    void generateSchedule_monthlyMidMonthStart_firstMilestoneIsAFullMonth() {
+        // Regression: starting on Nov 25 used to give milestone 1 only 6 days (deadline Nov 30).
+        CreatePlanRequest request = new CreatePlanRequest();
+        request.setGoalTitle("Laptop");
+        request.setTargetAmount(new BigDecimal("300.00"));
+        request.setTimeframeCategory(TimeframeCategory.SHORT_TERM);
+        request.setDurationInMonths(3);
+        request.setFrequency(Frequency.MONTHLY);
+        request.setRequiredPerPeriod(new BigDecimal("100.00"));
+        request.setStartDate(LocalDate.of(2026, 11, 25));
+
+        List<MilestoneEntity> schedule = MilestoneCalculator.generateSchedule(request);
+
+        assertThat(schedule).hasSize(3);
+        assertThat(schedule.get(0).getPeriodDate()).isEqualTo(LocalDate.of(2026, 11, 25));
+        assertThat(schedule.get(0).getDeadline()).isEqualTo(LocalDate.of(2026, 12, 24));
+        assertThat(schedule.get(0).getTimeline()).isEqualTo("Month 1 (25 Nov 2026 – 24 Dec 2026)");
+        // The plan ends the day before startDate + duration
+        assertThat(schedule.get(2).getDeadline()).isEqualTo(LocalDate.of(2027, 2, 24));
+    }
+
+    @Test
+    void generateSchedule_monthlyStartOn31st_periodsAreContiguousAcrossShortMonths() {
+        CreatePlanRequest request = new CreatePlanRequest();
+        request.setGoalTitle("Trip");
+        request.setTargetAmount(new BigDecimal("400.00"));
+        request.setTimeframeCategory(TimeframeCategory.SHORT_TERM);
+        request.setDurationInMonths(4);
+        request.setFrequency(Frequency.MONTHLY);
+        request.setRequiredPerPeriod(new BigDecimal("100.00"));
+        request.setStartDate(LocalDate.of(2028, 1, 31)); // 2028 is a leap year
+
+        List<MilestoneEntity> schedule = MilestoneCalculator.generateSchedule(request);
+
+        assertThat(schedule.get(0).getDeadline()).isEqualTo(LocalDate.of(2028, 2, 28));
+        for (int i = 1; i < schedule.size(); i++) {
+            assertThat(schedule.get(i).getPeriodDate())
+                    .as("milestone %d starts the day after the previous deadline", i)
+                    .isEqualTo(schedule.get(i - 1).getDeadline().plusDays(1));
+        }
     }
 
     @Test

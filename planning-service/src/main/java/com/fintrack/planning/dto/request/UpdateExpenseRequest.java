@@ -40,6 +40,6 @@ public class UpdateExpenseRequest {
     @Size(max = 255, message = "Note must not exceed 255 characters")
     private String note;
 
-    @Schema(description = "New plan association; not cleared when null (omitted)")
+    @Schema(description = "New plan association: omitted/null leaves it unchanged, an empty string unlinks the plan")
     private String planId;
 }
